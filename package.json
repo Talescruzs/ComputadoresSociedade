@@ -1,0 +1,15 @@
+{
+  "name": "computadores-sociedade",
+  "version": "0.1.0",
+  "main": "App.js",
+  "scripts": {
+    "start": "react-native start",
+    "android": "react-native run-android",
+    "ios": "react-native run-ios"
+  },
+  "dependencies": {
+    "expo": "^54.0.10",
+    "react": "18.2.0",
+    "react-native": "0.72.0"
+  }
+}
