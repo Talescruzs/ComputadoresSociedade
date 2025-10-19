@@ -1,0 +1,121 @@
+body {
+    background-color: #f5f5f5;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+.card {
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    margin-bottom: 20px;
+}
+
+.card-header {
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
+}
+
+.card-body {
+    padding: 20px;
+}
+
+.navbar {
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+#mapaLotacao {
+    min-height: 300px;
+}
+
+.linha-item {
+    background: linear-gradient(90deg, #007bff 0%, transparent 100%);
+    padding: 15px;
+    margin: 10px 0;
+    border-radius: 8px;
+    color: white;
+    position: relative;
+    overflow: hidden;
+}
+
+.linha-item::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 5px;
+    background-color: #fff;
+}
+
+.trecho {
+    display: flex;
+    align-items: center;
+    margin: 10px 0;
+    padding: 10px;
+    background-color: #f8f9fa;
+    border-radius: 5px;
+    position: relative;
+}
+
+.parada {
+    flex: 0 0 auto;
+    width: 80px;
+    text-align: center;
+    font-weight: bold;
+    font-size: 12px;
+}
+
+.barra-lotacao {
+    flex: 1;
+    height: 40px;
+    background-color: #e9ecef;
+    border-radius: 5px;
+    position: relative;
+    margin: 0 10px;
+    overflow: hidden;
+}
+
+.barra-preenchida {
+    height: 100%;
+    background: linear-gradient(90deg, #28a745, #ffc107, #dc3545);
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: bold;
+    transition: width 0.5s ease;
+}
+
+.badge-lotacao {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.table-responsive {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.status-badge {
+    font-size: 12px;
+}
+
+.chart-container {
+    position: relative;
+    height: 300px;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
+.loading {
+    animation: pulse 1.5s infinite;
+}
