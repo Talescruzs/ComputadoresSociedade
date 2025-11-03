@@ -11,8 +11,15 @@ import mysql.connector
 from mysql.connector import Error
 
 def load_env():
-    env_path = Path(__file__).parent / ".env"
-    load_dotenv(env_path)
+    # Novo: procurar .env na raiz e fallback para code/.env
+    root_env = Path(__file__).resolve().parents[1] / ".env"
+    code_env = Path(__file__).resolve().parents[1] / "code" / ".env"
+    for candidate in (root_env, code_env):
+        if candidate.exists() and load_dotenv(str(candidate), override=True):
+            print(f"Usando .env: {candidate}")
+            return candidate
+    print("Aviso: .env não encontrado (raiz nem code/.env). Usando variáveis de ambiente do sistema (se houver).")
+    return None
 
 def get_conn(include_db=False):
     cfg = {
@@ -23,6 +30,9 @@ def get_conn(include_db=False):
     }
     if include_db:
         cfg["database"] = os.getenv("DB_NAME", "transit_db")
+    # Log da conexão (sem senha)
+    target_db = cfg.get("database", "(sem DB)")
+    print(f"Conectando MySQL: {cfg['user']}@{cfg['host']}:{cfg['port']}/{target_db}")
     return mysql.connector.connect(**cfg)
 
 def ensure_database(cursor, db_name):
@@ -60,6 +70,18 @@ def column_exists(cursor, db_name, table_name, column_name):
         (db_name, table_name, column_name),
     )
     return cursor.fetchone()[0] == 1
+
+def is_not_nullable(cursor, db_name, table_name, column_name):
+    cursor.execute(
+        """
+        SELECT CASE WHEN is_nullable='NO' THEN 1 ELSE 0 END
+        FROM information_schema.columns
+        WHERE table_schema=%s AND table_name=%s AND column_name=%s
+        """,
+        (db_name, table_name, column_name),
+    )
+    row = cursor.fetchone()
+    return bool(row and row[0] == 1)
 
 def fk_exists(cursor, db_name, table_name, constraint_name):
     cursor.execute(
@@ -108,6 +130,13 @@ def align_schema_for_api(cursor, db_name):
     if table_exists(cursor, db_name, "registro_lotacao"):
         add_column_if_missing(cursor, db_name, "registro_lotacao", "id_parada_origem INT NOT NULL")
         add_column_if_missing(cursor, db_name, "registro_lotacao", "id_parada_destino INT NULL")
+        # Tornar coluna legada id_parada opcional, se existir e for NOT NULL
+        if column_exists(cursor, db_name, "registro_lotacao", "id_parada"):
+            try:
+                if is_not_nullable(cursor, db_name, "registro_lotacao", "id_parada"):
+                    cursor.execute("ALTER TABLE `registro_lotacao` MODIFY `id_parada` INT NULL")
+            except Error:
+                pass
         # Chaves estrangeiras (idempotentes)
         try:
             add_fk_if_missing(cursor, db_name, "registro_lotacao", "fk_rl_parada_origem", "id_parada_origem", "parada", "id_parada")
@@ -123,7 +152,7 @@ def main():
     parser.add_argument("--sql", default=str(Path(__file__).parents[1] / "DB" / "CreateDB.sql"), help="Caminho para o arquivo SQL")
     args = parser.parse_args()
 
-    load_env()
+    used_env = load_env()
     db_name = os.getenv("DB_NAME", "transit_db")
 
     sql_path = Path(args.sql)
@@ -156,7 +185,20 @@ def main():
 
         print(f"✅ Banco inicializado com sucesso no schema '{db_name}'.")
     except Error as e:
-        print(f"❌ Erro ao inicializar o banco: {e}")
+        # Mensagem amigável para erros de autenticação (1045/1698)
+        if getattr(e, "errno", None) in (1045, 1698):
+            user = os.getenv("DB_USER", "root")
+            host = os.getenv("DB_HOST", "localhost")
+            port = os.getenv("DB_PORT", "3306")
+            print(f"❌ Acesso negado ({e.errno}): {e}")
+            print(f"  - .env usado: {used_env or '[não carregado]'}")
+            print("  - Verifique credenciais no .env (DB_USER/DB_PASSWORD/DB_NAME) e privilégios no MySQL:")
+            print(f"      CREATE USER '{user}'@'localhost' IDENTIFIED BY 'SUA_SENHA';")
+            print(f"      GRANT ALL PRIVILEGES ON {db_name}.* TO '{user}'@'localhost';")
+            print("      FLUSH PRIVILEGES;")
+            print(f"  - Conferir conexão: {user}@{host}:{port}/{db_name}")
+        else:
+            print(f"❌ Erro ao inicializar o banco: {e}")
         sys.exit(1)
     finally:
         try:

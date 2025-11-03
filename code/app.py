@@ -12,12 +12,16 @@ except ModuleNotFoundError as e:
     )
 from datetime import datetime
 import os
+from pathlib import Path
 
 app = Flask(__name__)
 CORS(app)
 
-# Carregar variáveis do .env (no mesmo diretório do app.py)
-load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
+# Carregar variáveis do .env (tenta raiz do projeto e depois pasta code)
+BASE_DIR = Path(__file__).resolve().parents[1]
+for env_path in (BASE_DIR / ".env", Path(__file__).resolve().parent / ".env"):
+    if load_dotenv(str(env_path), override=True):
+        break
 
 # Configuração do banco de dados - MySQL
 DB_CONFIG = {
