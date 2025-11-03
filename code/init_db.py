@@ -1,167 +1,169 @@
 #!/usr/bin/env python3
 """
-Script para inicializar o banco de dados SQLite
+Script para inicializar o banco de dados MySQL
 """
-import sqlite3
 import os
+import sys
+import argparse
+from pathlib import Path
+from dotenv import load_dotenv
+import mysql.connector
+from mysql.connector import Error
 
-DB_PATH = 'transit.db'
+def load_env():
+    env_path = Path(__file__).parent / ".env"
+    load_dotenv(env_path)
 
-def init_database():
-    """Cria e inicializa o banco de dados"""
-    
-    print("═══════════════════════════════════════════════════════════")
-    print("  🗄️  Inicializando banco de dados SQLite")
-    print("═══════════════════════════════════════════════════════════")
-    print()
-    
-    # Verificar se já existe
-    if os.path.exists(DB_PATH):
-        print("⚠️  Banco de dados existente encontrado")
-        response = input("Deseja apagar e criar um novo? (s/N): ")
-        if response.lower() != 's':
-            print("Mantendo banco existente")
-            return
-        os.remove(DB_PATH)
-        print("✓ Banco antigo removido")
-    
-    # Criar conexão
-    print("Criando banco de dados...")
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    
-    # Criar tabelas
-    cur.executescript('''
-        -- Tabela de Ônibus
-        CREATE TABLE IF NOT EXISTS onibus (
-            id_onibus INTEGER PRIMARY KEY AUTOINCREMENT,
-            placa VARCHAR(10) UNIQUE NOT NULL,
-            capacidade INTEGER NOT NULL,
-            data_ultima_manutencao TIMESTAMP
-        );
+def get_conn(include_db=False):
+    cfg = {
+        "host": os.getenv("DB_HOST", "localhost"),
+        "user": os.getenv("DB_USER", "root"),
+        "password": os.getenv("DB_PASSWORD", ""),
+        "port": int(os.getenv("DB_PORT", "3306")),
+    }
+    if include_db:
+        cfg["database"] = os.getenv("DB_NAME", "transit_db")
+    return mysql.connector.connect(**cfg)
 
-        -- Tabela de Linhas
-        CREATE TABLE IF NOT EXISTS linha (
-            id_linha INTEGER PRIMARY KEY AUTOINCREMENT,
-            nome VARCHAR(100) NOT NULL
-        );
+def ensure_database(cursor, db_name):
+    cursor.execute(f"CREATE DATABASE IF NOT EXISTS `{db_name}` DEFAULT CHARACTER SET utf8mb4")
+    cursor.execute(f"USE `{db_name}`")
 
-        -- Tabela de Paradas
-        CREATE TABLE IF NOT EXISTS parada (
-            id_parada INTEGER PRIMARY KEY AUTOINCREMENT,
-            nome VARCHAR(100) NOT NULL,
-            localizacao VARCHAR(255) NOT NULL
-        );
+def _remove_db_directives(sql: str):
+    lines = []
+    for line in sql.splitlines():
+        l = line.strip().rstrip(";")
+        if l.upper().startswith("CREATE DATABASE") or l.upper().startswith("USE "):
+            continue
+        lines.append(line)
+    return "\n".join(lines)
 
-        -- Tabela de Rotas
-        CREATE TABLE IF NOT EXISTS rota (
-            id_rota INTEGER PRIMARY KEY AUTOINCREMENT,
-            id_linha INTEGER NOT NULL,
-            id_parada INTEGER NOT NULL,
-            ordem INTEGER NOT NULL,
-            esta_ativa BOOLEAN DEFAULT 1,
-            FOREIGN KEY (id_linha) REFERENCES linha(id_linha) ON DELETE CASCADE,
-            FOREIGN KEY (id_parada) REFERENCES parada(id_parada) ON DELETE CASCADE,
-            UNIQUE(id_linha, id_parada, ordem)
-        );
+def exec_sql_file(cursor, sql_path: Path):
+    with sql_path.open("r", encoding="utf-8") as f:
+        sql = f.read()
+    sql = _remove_db_directives(sql)
+    if not sql.strip():
+        return
+    for _ in cursor.execute(sql, multi=True):
+        pass
 
-        -- Tabela de Viagens
-        CREATE TABLE IF NOT EXISTS viagem (
-            id_viagem INTEGER PRIMARY KEY AUTOINCREMENT,
-            id_onibus INTEGER NOT NULL,
-            id_linha INTEGER NOT NULL,
-            data_hora_inicio TIMESTAMP NOT NULL,
-            data_hora_fim TIMESTAMP,
-            status VARCHAR(20) DEFAULT 'em_andamento',
-            FOREIGN KEY (id_onibus) REFERENCES onibus(id_onibus) ON DELETE CASCADE,
-            FOREIGN KEY (id_linha) REFERENCES linha(id_linha) ON DELETE CASCADE
-        );
+def table_exists(cursor, db_name, table_name):
+    cursor.execute(
+        "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=%s AND table_name=%s",
+        (db_name, table_name),
+    )
+    return cursor.fetchone()[0] == 1
 
-        -- Tabela de Registro de Lotação
-        CREATE TABLE IF NOT EXISTS registro_lotacao (
-            id_lotacao INTEGER PRIMARY KEY AUTOINCREMENT,
-            id_viagem INTEGER NOT NULL,
-            id_parada_origem INTEGER NOT NULL,
-            id_parada_destino INTEGER,
-            data_hora TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            qtd_pessoas INTEGER NOT NULL,
-            FOREIGN KEY (id_viagem) REFERENCES viagem(id_viagem) ON DELETE CASCADE,
-            FOREIGN KEY (id_parada_origem) REFERENCES parada(id_parada) ON DELETE CASCADE,
-            FOREIGN KEY (id_parada_destino) REFERENCES parada(id_parada) ON DELETE CASCADE
-        );
+def column_exists(cursor, db_name, table_name, column_name):
+    cursor.execute(
+        "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=%s AND table_name=%s AND column_name=%s",
+        (db_name, table_name, column_name),
+    )
+    return cursor.fetchone()[0] == 1
 
-        -- Índices
-        CREATE INDEX IF NOT EXISTS idx_viagem_onibus ON viagem(id_onibus);
-        CREATE INDEX IF NOT EXISTS idx_viagem_linha ON viagem(id_linha);
-        CREATE INDEX IF NOT EXISTS idx_rota_linha ON rota(id_linha);
-        CREATE INDEX IF NOT EXISTS idx_registro_viagem ON registro_lotacao(id_viagem);
-        CREATE INDEX IF NOT EXISTS idx_registro_data ON registro_lotacao(data_hora);
-    ''')
-    
-    print("✓ Tabelas criadas")
-    
-    # Inserir dados de exemplo
-    print("Inserindo dados de exemplo...")
-    
-    cur.executescript('''
-        -- Ônibus
-        INSERT INTO onibus (placa, capacidade, data_ultima_manutencao) VALUES
-            ('ABC-1234', 50, '2024-09-15 10:00:00'),
-            ('DEF-5678', 45, '2024-09-20 14:30:00'),
-            ('GHI-9012', 60, '2024-10-01 09:00:00');
+def fk_exists(cursor, db_name, table_name, constraint_name):
+    cursor.execute(
+        """
+        SELECT COUNT(*) 
+        FROM information_schema.referential_constraints 
+        WHERE constraint_schema=%s AND constraint_name=%s AND table_name=%s
+        """,
+        (db_name, constraint_name, table_name),
+    )
+    return cursor.fetchone()[0] == 1
 
-        -- Linhas
-        INSERT INTO linha (nome) VALUES
-            ('Linha 100 - Centro/Terminal'),
-            ('Linha 200 - Aeroporto/Rodoviária'),
-            ('Linha 300 - Shopping/Hospital');
+def rename_table_if_needed(cursor, db_name, old, new):
+    if table_exists(cursor, db_name, old) and not table_exists(cursor, db_name, new):
+        cursor.execute(f"RENAME TABLE `{old}` TO `{new}`")
 
-        -- Paradas
-        INSERT INTO parada (nome, localizacao) VALUES
-            ('Terminal Central', 'Av. Principal, 100'),
-            ('Praça da Matriz', 'Centro, Praça 1'),
-            ('Shopping Center', 'Av. Comercial, 500'),
-            ('Hospital Regional', 'Rua da Saúde, 200'),
-            ('Aeroporto', 'Rod. BR-101, km 45'),
-            ('Rodoviária', 'Av. dos Estados, 300');
+def add_column_if_missing(cursor, db_name, table, column_def):
+    col_name = column_def.split()[0].strip("`")
+    if not column_exists(cursor, db_name, table, col_name):
+        cursor.execute(f"ALTER TABLE `{table}` ADD COLUMN {column_def}")
 
-        -- Rotas
-        INSERT INTO rota (id_linha, id_parada, ordem, esta_ativa) VALUES
-            (1, 1, 1, 1),
-            (1, 2, 2, 1),
-            (1, 3, 3, 1),
-            (2, 5, 1, 1),
-            (2, 1, 2, 1),
-            (2, 6, 3, 1),
-            (3, 3, 1, 1),
-            (3, 4, 2, 1),
-            (3, 1, 3, 1);
-    ''')
-    
-    conn.commit()
-    print("✓ Dados inseridos")
-    
-    conn.close()
-    
-    print()
-    print("═══════════════════════════════════════════════════════════")
-    print("  ✅ Banco de dados criado com sucesso!")
-    print("═══════════════════════════════════════════════════════════")
-    print()
-    print("📊 Dados incluídos:")
-    print("  • 3 ônibus")
-    print("  • 3 linhas")
-    print("  • 6 paradas")
-    print("  • 9 rotas")
-    print()
-    print("🚀 Próximo passo:")
-    print("  Execute: ./start_sqlite.sh")
-    print("  Ou: python app_sqlite.py")
-    print()
+def add_fk_if_missing(cursor, db_name, table, constraint_name, col, ref_table, ref_col):
+    if not fk_exists(cursor, db_name, table, constraint_name):
+        cursor.execute(
+            f"ALTER TABLE `{table}` ADD CONSTRAINT `{constraint_name}` FOREIGN KEY (`{col}`) "
+            f"REFERENCES `{ref_table}`(`{ref_col}`)"
+        )
 
-if __name__ == '__main__':
+def align_schema_for_api(cursor, db_name):
+    # Renomear tabelas CamelCase -> minúsculas (compatível com as queries da API)
+    rename_table_if_needed(cursor, db_name, "Onibus", "onibus")
+    rename_table_if_needed(cursor, db_name, "Linha", "linha")
+    rename_table_if_needed(cursor, db_name, "Parada", "parada")
+    rename_table_if_needed(cursor, db_name, "Viagem", "viagem")
+    rename_table_if_needed(cursor, db_name, "RegistroLotacao", "registro_lotacao")
+    rename_table_if_needed(cursor, db_name, "Rota", "rota")
+
+    # Garantir colunas usadas pela API
+    # viagem: data_hora_inicio, data_hora_fim, status
+    if table_exists(cursor, db_name, "viagem"):
+        add_column_if_missing(cursor, db_name, "viagem", "data_hora_inicio DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP")
+        add_column_if_missing(cursor, db_name, "viagem", "data_hora_fim DATETIME NULL")
+        add_column_if_missing(cursor, db_name, "viagem", "status VARCHAR(20) NOT NULL DEFAULT 'em_andamento'")
+
+    # registro_lotacao: id_parada_origem, id_parada_destino
+    if table_exists(cursor, db_name, "registro_lotacao"):
+        add_column_if_missing(cursor, db_name, "registro_lotacao", "id_parada_origem INT NOT NULL")
+        add_column_if_missing(cursor, db_name, "registro_lotacao", "id_parada_destino INT NULL")
+        # Chaves estrangeiras (idempotentes)
+        try:
+            add_fk_if_missing(cursor, db_name, "registro_lotacao", "fk_rl_parada_origem", "id_parada_origem", "parada", "id_parada")
+        except Error:
+            pass
+        try:
+            add_fk_if_missing(cursor, db_name, "registro_lotacao", "fk_rl_parada_destino", "id_parada_destino", "parada", "id_parada")
+        except Error:
+            pass
+
+def main():
+    parser = argparse.ArgumentParser(description="Inicializa o banco MySQL com base no CreateDB.sql")
+    parser.add_argument("--sql", default=str(Path(__file__).parents[1] / "DB" / "CreateDB.sql"), help="Caminho para o arquivo SQL")
+    args = parser.parse_args()
+
+    load_env()
+    db_name = os.getenv("DB_NAME", "transit_db")
+
+    sql_path = Path(args.sql)
+    if not sql_path.exists():
+        print(f"Arquivo SQL não encontrado: {sql_path}")
+        sys.exit(1)
+
     try:
-        init_database()
-    except Exception as e:
-        print(f"\n❌ Erro: {e}")
-        exit(1)
+        # Conexão sem database para criar DB
+        conn = get_conn(include_db=False)
+        cur = conn.cursor()
+        ensure_database(cur, db_name)
+        conn.commit()
+
+        # Reabrir conexão já usando o DB alvo
+        cur.close()
+        conn.close()
+        conn = get_conn(include_db=True)
+        cur = conn.cursor()
+
+        # Executar SQL (sem CREATE DATABASE/USE)
+        exec_sql_file(cur, sql_path)
+        conn.commit()
+
+        # Ajustes para casar com a API
+        cur.close()
+        cur = conn.cursor()
+        align_schema_for_api(cur, db_name)
+        conn.commit()
+
+        print(f"✅ Banco inicializado com sucesso no schema '{db_name}'.")
+    except Error as e:
+        print(f"❌ Erro ao inicializar o banco: {e}")
+        sys.exit(1)
+    finally:
+        try:
+            cur.close()
+            conn.close()
+        except Exception:
+            pass
+
+if __name__ == "__main__":
+    main()

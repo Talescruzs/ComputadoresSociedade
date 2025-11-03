@@ -1,25 +1,36 @@
-from flask import Flask, jsonify, request, render_template
-from flask_cors import CORS
-import psycopg2
-from psycopg2.extras import RealDictCursor
+try:
+    from flask import Flask, jsonify, request, render_template
+    from flask_cors import CORS
+    import mysql.connector
+    from mysql.connector import Error
+    from dotenv import load_dotenv
+except ModuleNotFoundError as e:
+    missing = getattr(e, "name", str(e))
+    raise SystemExit(
+        f"Dependência ausente: {missing}. Ative seu venv e instale com:\n"
+        "  pip install Flask flask-cors mysql-connector-python python-dotenv requests"
+    )
 from datetime import datetime
 import os
 
 app = Flask(__name__)
 CORS(app)
 
-# Configuração do banco de dados
+# Carregar variáveis do .env (no mesmo diretório do app.py)
+load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
+
+# Configuração do banco de dados - MySQL
 DB_CONFIG = {
-    'dbname': os.environ.get('DB_NAME', 'transit_db'),
-    'user': os.environ.get('DB_USER', 'postgres'),
-    'password': os.environ.get('DB_PASSWORD', 'postgres'),
     'host': os.environ.get('DB_HOST', 'localhost'),
-    'port': os.environ.get('DB_PORT', '5432')
+    'user': os.environ.get('DB_USER', 'root'),
+    'password': os.environ.get('DB_PASSWORD', ''),
+    'database': os.environ.get('DB_NAME', 'transit_db'),
+    'port': int(os.environ.get('DB_PORT', '3306')),
 }
 
 def get_db_connection():
-    """Cria conexão com o banco de dados"""
-    conn = psycopg2.connect(**DB_CONFIG)
+    """Cria conexão com o banco de dados (MySQL)"""
+    conn = mysql.connector.connect(**DB_CONFIG)
     return conn
 
 # ==================== CRUD para ÔNIBUS ====================
@@ -28,7 +39,7 @@ def get_db_connection():
 def get_onibus():
     """Lista todos os ônibus"""
     conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur = conn.cursor(dictionary=True)
     cur.execute('SELECT * FROM onibus ORDER BY id_onibus')
     onibus = cur.fetchall()
     cur.close()
@@ -39,7 +50,7 @@ def get_onibus():
 def get_onibus_by_id(id):
     """Busca um ônibus por ID"""
     conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur = conn.cursor(dictionary=True)
     cur.execute('SELECT * FROM onibus WHERE id_onibus = %s', (id,))
     onibus = cur.fetchone()
     cur.close()
@@ -53,14 +64,16 @@ def create_onibus():
     """Cria novo ônibus"""
     data = request.get_json()
     conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur = conn.cursor(dictionary=True)
     try:
         cur.execute(
-            'INSERT INTO onibus (placa, capacidade, data_ultima_manutencao) VALUES (%s, %s, %s) RETURNING *',
+            'INSERT INTO onibus (placa, capacidade, data_ultima_manutencao) VALUES (%s, %s, %s)',
             (data['placa'], data['capacidade'], data.get('data_ultima_manutencao'))
         )
-        onibus = cur.fetchone()
+        onibus_id = cur.lastrowid
         conn.commit()
+        cur.execute('SELECT * FROM onibus WHERE id_onibus = %s', (onibus_id,))
+        onibus = cur.fetchone()
         cur.close()
         conn.close()
         return jsonify(onibus), 201
@@ -75,18 +88,21 @@ def update_onibus(id):
     """Atualiza um ônibus"""
     data = request.get_json()
     conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur = conn.cursor(dictionary=True)
     try:
         cur.execute(
-            'UPDATE onibus SET placa = %s, capacidade = %s, data_ultima_manutencao = %s WHERE id_onibus = %s RETURNING *',
+            'UPDATE onibus SET placa = %s, capacidade = %s, data_ultima_manutencao = %s WHERE id_onibus = %s',
             (data['placa'], data['capacidade'], data.get('data_ultima_manutencao'), id)
         )
-        onibus = cur.fetchone()
         conn.commit()
+        if cur.rowcount > 0:
+            cur.execute('SELECT * FROM onibus WHERE id_onibus = %s', (id,))
+            onibus = cur.fetchone()
+            cur.close()
+            conn.close()
+            return jsonify(onibus)
         cur.close()
         conn.close()
-        if onibus:
-            return jsonify(onibus)
         return jsonify({'error': 'Ônibus não encontrado'}), 404
     except Exception as e:
         conn.rollback()
@@ -114,7 +130,7 @@ def delete_onibus(id):
 def get_linhas():
     """Lista todas as linhas"""
     conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur = conn.cursor(dictionary=True)
     cur.execute('SELECT * FROM linha ORDER BY id_linha')
     linhas = cur.fetchall()
     cur.close()
@@ -125,7 +141,7 @@ def get_linhas():
 def get_linha_by_id(id):
     """Busca uma linha por ID"""
     conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur = conn.cursor(dictionary=True)
     cur.execute('SELECT * FROM linha WHERE id_linha = %s', (id,))
     linha = cur.fetchone()
     cur.close()
@@ -139,11 +155,13 @@ def create_linha():
     """Cria nova linha"""
     data = request.get_json()
     conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur = conn.cursor(dictionary=True)
     try:
-        cur.execute('INSERT INTO linha (nome) VALUES (%s) RETURNING *', (data['nome'],))
-        linha = cur.fetchone()
+        cur.execute('INSERT INTO linha (nome) VALUES (%s)', (data['nome'],))
+        linha_id = cur.lastrowid
         conn.commit()
+        cur.execute('SELECT * FROM linha WHERE id_linha = %s', (linha_id,))
+        linha = cur.fetchone()
         cur.close()
         conn.close()
         return jsonify(linha), 201
@@ -158,15 +176,18 @@ def update_linha(id):
     """Atualiza uma linha"""
     data = request.get_json()
     conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur = conn.cursor(dictionary=True)
     try:
-        cur.execute('UPDATE linha SET nome = %s WHERE id_linha = %s RETURNING *', (data['nome'], id))
-        linha = cur.fetchone()
+        cur.execute('UPDATE linha SET nome = %s WHERE id_linha = %s', (data['nome'], id))
         conn.commit()
+        if cur.rowcount > 0:
+            cur.execute('SELECT * FROM linha WHERE id_linha = %s', (id,))
+            linha = cur.fetchone()
+            cur.close()
+            conn.close()
+            return jsonify(linha)
         cur.close()
         conn.close()
-        if linha:
-            return jsonify(linha)
         return jsonify({'error': 'Linha não encontrada'}), 404
     except Exception as e:
         conn.rollback()
@@ -194,7 +215,7 @@ def delete_linha(id):
 def get_paradas():
     """Lista todas as paradas"""
     conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur = conn.cursor(dictionary=True)
     cur.execute('SELECT * FROM parada ORDER BY id_parada')
     paradas = cur.fetchall()
     cur.close()
@@ -205,7 +226,7 @@ def get_paradas():
 def get_parada_by_id(id):
     """Busca uma parada por ID"""
     conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur = conn.cursor(dictionary=True)
     cur.execute('SELECT * FROM parada WHERE id_parada = %s', (id,))
     parada = cur.fetchone()
     cur.close()
@@ -219,14 +240,16 @@ def create_parada():
     """Cria nova parada"""
     data = request.get_json()
     conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur = conn.cursor(dictionary=True)
     try:
         cur.execute(
-            'INSERT INTO parada (nome, localizacao) VALUES (%s, %s) RETURNING *',
+            'INSERT INTO parada (nome, localizacao) VALUES (%s, %s)',
             (data['nome'], data['localizacao'])
         )
-        parada = cur.fetchone()
+        parada_id = cur.lastrowid
         conn.commit()
+        cur.execute('SELECT * FROM parada WHERE id_parada = %s', (parada_id,))
+        parada = cur.fetchone()
         cur.close()
         conn.close()
         return jsonify(parada), 201
@@ -241,18 +264,21 @@ def update_parada(id):
     """Atualiza uma parada"""
     data = request.get_json()
     conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur = conn.cursor(dictionary=True)
     try:
         cur.execute(
-            'UPDATE parada SET nome = %s, localizacao = %s WHERE id_parada = %s RETURNING *',
+            'UPDATE parada SET nome = %s, localizacao = %s WHERE id_parada = %s',
             (data['nome'], data['localizacao'], id)
         )
-        parada = cur.fetchone()
         conn.commit()
+        if cur.rowcount > 0:
+            cur.execute('SELECT * FROM parada WHERE id_parada = %s', (id,))
+            parada = cur.fetchone()
+            cur.close()
+            conn.close()
+            return jsonify(parada)
         cur.close()
         conn.close()
-        if parada:
-            return jsonify(parada)
         return jsonify({'error': 'Parada não encontrada'}), 404
     except Exception as e:
         conn.rollback()
@@ -280,7 +306,7 @@ def delete_parada(id):
 def get_viagens():
     """Lista todas as viagens"""
     conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur = conn.cursor(dictionary=True)
     cur.execute('''
         SELECT v.*, o.placa, l.nome as linha_nome 
         FROM viagem v
@@ -297,7 +323,7 @@ def get_viagens():
 def get_viagem_by_id(id):
     """Busca uma viagem por ID"""
     conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur = conn.cursor(dictionary=True)
     cur.execute('''
         SELECT v.*, o.placa, l.nome as linha_nome 
         FROM viagem v
@@ -317,16 +343,24 @@ def create_viagem():
     """Cria nova viagem"""
     data = request.get_json()
     conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur = conn.cursor(dictionary=True)
     try:
         cur.execute(
             '''INSERT INTO viagem (id_onibus, id_linha, data_hora_inicio, data_hora_fim, status) 
-               VALUES (%s, %s, %s, %s, %s) RETURNING *''',
+               VALUES (%s, %s, %s, %s, %s)''',
             (data['id_onibus'], data['id_linha'], data.get('data_hora_inicio', datetime.now()),
              data.get('data_hora_fim'), data.get('status', 'em_andamento'))
         )
-        viagem = cur.fetchone()
+        viagem_id = cur.lastrowid
         conn.commit()
+        cur.execute('''
+            SELECT v.*, o.placa, l.nome as linha_nome 
+            FROM viagem v
+            JOIN onibus o ON v.id_onibus = o.id_onibus
+            JOIN linha l ON v.id_linha = l.id_linha
+            WHERE v.id_viagem = %s
+        ''', (viagem_id,))
+        viagem = cur.fetchone()
         cur.close()
         conn.close()
         return jsonify(viagem), 201
@@ -341,20 +375,29 @@ def update_viagem(id):
     """Atualiza uma viagem"""
     data = request.get_json()
     conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur = conn.cursor(dictionary=True)
     try:
         cur.execute(
             '''UPDATE viagem SET id_onibus = %s, id_linha = %s, data_hora_inicio = %s, 
-               data_hora_fim = %s, status = %s WHERE id_viagem = %s RETURNING *''',
+               data_hora_fim = %s, status = %s WHERE id_viagem = %s''',
             (data['id_onibus'], data['id_linha'], data['data_hora_inicio'],
              data.get('data_hora_fim'), data['status'], id)
         )
-        viagem = cur.fetchone()
         conn.commit()
+        if cur.rowcount > 0:
+            cur.execute('''
+                SELECT v.*, o.placa, l.nome as linha_nome 
+                FROM viagem v
+                JOIN onibus o ON v.id_onibus = o.id_onibus
+                JOIN linha l ON v.id_linha = l.id_linha
+                WHERE v.id_viagem = %s
+            ''', (id,))
+            viagem = cur.fetchone()
+            cur.close()
+            conn.close()
+            return jsonify(viagem)
         cur.close()
         conn.close()
-        if viagem:
-            return jsonify(viagem)
         return jsonify({'error': 'Viagem não encontrada'}), 404
     except Exception as e:
         conn.rollback()
@@ -382,7 +425,7 @@ def delete_viagem(id):
 def get_lotacoes():
     """Lista todos os registros de lotação"""
     conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur = conn.cursor(dictionary=True)
     cur.execute('''
         SELECT rl.*, 
                po.nome as parada_origem_nome,
@@ -405,7 +448,7 @@ def get_lotacoes():
 def get_lotacao_by_id(id):
     """Busca um registro de lotação por ID"""
     conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur = conn.cursor(dictionary=True)
     cur.execute('''
         SELECT rl.*, 
                po.nome as parada_origem_nome,
@@ -427,16 +470,30 @@ def create_lotacao():
     """Cria novo registro de lotação"""
     data = request.get_json()
     conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur = conn.cursor(dictionary=True)
     try:
         cur.execute(
             '''INSERT INTO registro_lotacao (id_viagem, id_parada_origem, id_parada_destino, data_hora, qtd_pessoas) 
-               VALUES (%s, %s, %s, %s, %s) RETURNING *''',
+               VALUES (%s, %s, %s, %s, %s)''',
             (data['id_viagem'], data['id_parada_origem'], data.get('id_parada_destino'),
              data.get('data_hora', datetime.now()), data['qtd_pessoas'])
         )
-        lotacao = cur.fetchone()
+        lotacao_id = cur.lastrowid
         conn.commit()
+        cur.execute('''
+            SELECT rl.*, 
+                   po.nome as parada_origem_nome,
+                   pd.nome as parada_destino_nome,
+                   v.id_linha,
+                   l.nome as linha_nome
+            FROM registro_lotacao rl
+            JOIN parada po ON rl.id_parada_origem = po.id_parada
+            LEFT JOIN parada pd ON rl.id_parada_destino = pd.id_parada
+            JOIN viagem v ON rl.id_viagem = v.id_viagem
+            JOIN linha l ON v.id_linha = l.id_linha
+            WHERE rl.id_lotacao = %s
+        ''', (lotacao_id,))
+        lotacao = cur.fetchone()
         cur.close()
         conn.close()
         return jsonify(lotacao), 201
@@ -451,21 +508,36 @@ def update_lotacao(id):
     """Atualiza um registro de lotação"""
     data = request.get_json()
     conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur = conn.cursor(dictionary=True)
     try:
         cur.execute(
             '''UPDATE registro_lotacao SET id_viagem = %s, id_parada_origem = %s, 
                id_parada_destino = %s, data_hora = %s, qtd_pessoas = %s 
-               WHERE id_lotacao = %s RETURNING *''',
+               WHERE id_lotacao = %s''',
             (data['id_viagem'], data['id_parada_origem'], data.get('id_parada_destino'),
              data['data_hora'], data['qtd_pessoas'], id)
         )
-        lotacao = cur.fetchone()
         conn.commit()
+        if cur.rowcount > 0:
+            cur.execute('''
+                SELECT rl.*, 
+                       po.nome as parada_origem_nome,
+                       pd.nome as parada_destino_nome,
+                       v.id_linha,
+                       l.nome as linha_nome
+                FROM registro_lotacao rl
+                JOIN parada po ON rl.id_parada_origem = po.id_parada
+                LEFT JOIN parada pd ON rl.id_parada_destino = pd.id_parada
+                JOIN viagem v ON rl.id_viagem = v.id_viagem
+                JOIN linha l ON v.id_linha = l.id_linha
+                WHERE rl.id_lotacao = %s
+            ''', (id,))
+            lotacao = cur.fetchone()
+            cur.close()
+            conn.close()
+            return jsonify(lotacao)
         cur.close()
         conn.close()
-        if lotacao:
-            return jsonify(lotacao)
         return jsonify({'error': 'Registro não encontrado'}), 404
     except Exception as e:
         conn.rollback()
@@ -473,27 +545,13 @@ def update_lotacao(id):
         conn.close()
         return jsonify({'error': str(e)}), 400
 
-@app.route('/api/lotacao/<int:id>', methods=['DELETE'])
-def delete_lotacao(id):
-    """Deleta um registro de lotação"""
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute('DELETE FROM registro_lotacao WHERE id_lotacao = %s', (id,))
-    affected = cur.rowcount
-    conn.commit()
-    cur.close()
-    conn.close()
-    if affected > 0:
-        return jsonify({'message': 'Registro deletado com sucesso'}), 200
-    return jsonify({'error': 'Registro não encontrado'}), 404
-
 # ==================== ENDPOINTS DE ANÁLISE ====================
 
 @app.route('/api/analytics/lotacao-por-linha', methods=['GET'])
 def lotacao_por_linha():
     """Retorna dados de lotação agregados por linha"""
     conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur = conn.cursor(dictionary=True)
     cur.execute('''
         SELECT 
             l.id_linha,
@@ -517,7 +575,7 @@ def lotacao_por_linha():
 def lotacao_por_trecho():
     """Retorna dados de lotação por trecho (origem-destino)"""
     conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur = conn.cursor(dictionary=True)
     cur.execute('''
         SELECT 
             l.nome as linha_nome,
@@ -545,7 +603,7 @@ def lotacao_por_trecho():
 def lotacao_horaria():
     """Retorna dados de lotação por horário do dia"""
     conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur = conn.cursor(dictionary=True)
     cur.execute('''
         SELECT 
             EXTRACT(HOUR FROM rl.data_hora) as hora,
