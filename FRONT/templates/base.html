@@ -4,19 +4,43 @@
   <meta charset="utf-8">
   <title>Dashboard Transporte</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <style>
-    body { font-family: Arial, sans-serif; margin: 24px; }
-    header { margin-bottom: 16px; }
-    table { border-collapse: collapse; width: 100%; margin: 8px 0; }
-    th, td { border: 1px solid #ddd; padding: 8px; }
-    th { background: #f3f3f3; }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  </style>
+  <!-- Bootstrap CSS (para o dashboard baseado no layout antigo) -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Seus estilos -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+  <!-- Estilos específicos do dashboard antigo -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <script>window.API_BASE="{{ API_BASE_URL }}";</script>
 </head>
 <body>
-  <header>
-    <h1>Dashboard de Transporte Público</h1>
+  <header class="app-header navbar navbar-dark bg-dark mb-4">
+    <div class="container-fluid">
+      <span class="navbar-brand mb-0 h1">🚌 Dashboard de Transporte Público</span>
+      <nav>
+        <a class="text-light me-3" href="/">Início</a>
+        <a class="text-light me-3" href="/insights">Insights</a>
+        <a class="text-light" href="#" onclick="window.location.reload()">Atualizar</a>
+      </nav>
+    </div>
   </header>
-  {% block content %}{% endblock %}
+
+  <main class="container-fluid">
+    {% block content %}{% endblock %}
+  </main>
+
+  <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+  <footer class="app-footer">
+    <div class="container">
+      <small>© {{ 2025 }} Transporte Público</small>
+    </div>
+  </footer>
+
+  <!-- Bootstrap JS bundle -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <!-- Script base -->
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>
 </html>

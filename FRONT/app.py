@@ -49,6 +49,13 @@ def create_app():
             # fallback simples
             return str(args[0] if args else "")
 
+    # Expor API_BASE_URL aos templates
+    @app.context_processor
+    def inject_api_base():
+        return {
+            "API_BASE_URL": os.getenv("API_BASE_URL", "http://localhost:5000/api").rstrip("/")
+        }
+
     from FRONT.routes.pages_routes import pages_bp
     app.register_blueprint(pages_bp)
     return app
