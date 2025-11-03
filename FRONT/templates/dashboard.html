@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="grid">
+  <section>
+    <h2>Ônibus</h2>
+    <form method="post" action="/onibus">
+      <input name="placa" placeholder="Placa" required>
+      <input name="capacidade" placeholder="Capacidade" type="number" min="1" required>
+      <input name="data_ultima_manutencao" placeholder="YYYY-MM-DD HH:MM:SS">
+      <button type="submit">Adicionar</button>
+    </form>
+    <table>
+      <thead><tr><th>ID</th><th>Placa</th><th>Capacidade</th><th>Últ. Manutenção</th></tr></thead>
+      <tbody>
+      {% for b in onibus %}
+        <tr><td>{{ b.id_onibus }}</td><td>{{ b.placa }}</td><td>{{ b.capacidade }}</td><td>{{ b.data_ultima_manutencao }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Linhas</h2>
+    <table>
+      <thead><tr><th>ID</th><th>Nome</th></tr></thead>
+      <tbody>
+      {% for l in linhas %}
+        <tr><td>{{ l.id_linha }}</td><td>{{ l.nome }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Paradas</h2>
+    <table>
+      <thead><tr><th>ID</th><th>Nome</th><th>Localização</th></tr></thead>
+      <tbody>
+      {% for p in paradas %}
+        <tr><td>{{ p.id_parada }}</td><td>{{ p.nome }}</td><td>{{ p.localizacao }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Métricas (Média por Linha)</h2>
+    <table>
+      <thead><tr><th>Linha</th><th>Média</th><th>Máx</th><th>Registros</th></tr></thead>
+      <tbody>
+      {% for m in metrics.por_linha %}
+        <tr><td>{{ m.linha_nome }}</td><td>{{ '%.1f'|format(m.media_pessoas) }}</td><td>{{ m.max_pessoas }}</td><td>{{ m.total_registros }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </section>
+</div>
+{% endblock %}
