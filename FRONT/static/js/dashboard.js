@@ -5,6 +5,8 @@ const API_URL = (window.API_BASE || 'http://localhost:5000/api').replace(/\/+$/,
 let chartLotacaoPorLinha = null;
 let chartLotacaoHoraria = null;
 let chartTrechosLotados = null;
+let chartLinhaHoraria = null;
+let chartLinhaTrechos = null;
 
 function updateTimestamp() {
   const now = new Date();
@@ -22,6 +24,166 @@ async function fetchData(endpoint) {
     return null;
   }
 }
+
+// Tenta obter a rota ordenada da linha
+async function fetchRouteForLine(idLinha) {
+  const tryPaths = [
+    `/linhas/${idLinha}/rota`,
+    `/linha/${idLinha}/rota`,
+    `/rotas?linha_id=${idLinha}`
+  ];
+  for (const p of tryPaths) {
+    const data = await fetchData(p);
+    if (Array.isArray(data) && data.length) {
+      return data
+        .map(x => ({
+          id_parada: x.id_parada ?? x.parada_id ?? x.id ?? null,
+          nome: x.parada_nome ?? x.nome ?? x.parada ?? '',
+          ordem: x.ordem ?? x.order ?? null
+        }))
+        .sort((a, b) => {
+          if (a.ordem == null || b.ordem == null) return 0;
+          return a.ordem - b.ordem;
+        });
+    }
+  }
+  return [];
+}
+
+// Preenche a tabela "Paradas na ordem da rota"
+async function updateLinhaRotaTable(idLinha) {
+  const tbody = document.getElementById('tabelaRotaLinha');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="2" class="text-center">Carregando...</td></tr>';
+  const rota = await fetchRouteForLine(idLinha);
+  if (!rota || rota.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="2" class="text-center">Rota não encontrada para esta linha</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rota.map(r => `
+    <tr>
+      <td>${(typeof r.ordem === 'number' ? r.ordem + 1 : '')}</td>
+      <td>${r.nome}</td>
+    </tr>
+  `).join('');
+}
+
+// --- Bloco: análise por linha selecionada ---
+
+async function populateLinhasSelect() {
+  const sel = document.getElementById('selectLinha');
+  if (!sel) return;
+  const linhas = await fetchData('/linhas') || [];
+  sel.innerHTML = linhas.map(l => `<option value="${l.id_linha}">${l.nome}</option>`).join('');
+  if (linhas.length > 0) {
+    sel.value = linhas[0].id_linha;
+    await updateLinhaCharts(linhas[0].id_linha);
+    await updateLinhaRotaTable(linhas[0].id_linha); // novo: preenche tabela da rota
+  }
+  sel.addEventListener('change', async () => {
+    await updateLinhaCharts(sel.value);
+    await updateLinhaRotaTable(sel.value); // novo: atualiza tabela da rota
+  });
+}
+
+async function updateLinhaCharts(idLinha) {
+  idLinha = Number(idLinha);
+  const [horaria, trechos] = await Promise.all([
+    fetchData(`/analytics/linha/${idLinha}/horaria`),
+    fetchData(`/analytics/linha/${idLinha}/trechos`)
+  ]);
+
+  // Gráfico: lotação por hora para a linha
+  const ctxH = document.getElementById('chartLinhaHoraria')?.getContext('2d');
+  if (ctxH) {
+    if (chartLinhaHoraria) chartLinhaHoraria.destroy();
+    const labels = (horaria || []).map(d => `${d.hora}:00`);
+    const values = (horaria || []).map(d => Number(d.media_pessoas));
+    chartLinhaHoraria = new Chart(ctxH, {
+      type: 'line',
+      data: { labels, datasets: [{
+        label: 'Média por hora (linha selecionada)',
+        data: values, borderColor: '#0ea5e9', backgroundColor: 'rgba(14,165,233,.2)',
+        borderWidth: 3, fill: true, tension: .35
+      }]},
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: {
+          y: { beginAtZero: true, title: { display: true, text: 'Pessoas' } },
+          x: { title: { display: true, text: 'Hora' } }
+        },
+        plugins: { legend: { display: true, position: 'top' } }
+      }
+    });
+  }
+
+  // Gráfico: trechos da linha (ordenado pela rota da linha)
+  const ctxT = document.getElementById('chartLinhaTrechos')?.getContext('2d');
+  if (ctxT) {
+    if (chartLinhaTrechos) chartLinhaTrechos.destroy();
+
+    let labels = [];
+    let values = [];
+    let usedRouteOrder = false;
+
+    // Busca a rota e ordena os trechos conforme parada[i] -> parada[i+1]
+    const rota = await fetchRouteForLine(idLinha);
+    if (rota && rota.length >= 2 && Array.isArray(trechos)) {
+      // Indexa o analytics por par NomeOrigem>>>NomeDestino
+      const mapTrechos = new Map(
+        trechos.map(t => [`${t.parada_origem}>>>${t.parada_destino}`, Number(t.media_pessoas)])
+      );
+      for (let i = 0; i < rota.length - 1; i++) {
+        const o = rota[i]?.nome || '';
+        const d = rota[i + 1]?.nome || '';
+        const key = `${o}>>>${d}`;
+        const v = mapTrechos.has(key) ? mapTrechos.get(key) : 0;
+        labels.push(`${o} → ${d}`);
+        values.push(v);
+      }
+      usedRouteOrder = true;
+    } else if (Array.isArray(trechos)) {
+      // Fallback: top 10 por média (comportamento anterior)
+      const top = trechos.slice(0, 10);
+      labels = top.map(t => `${t.parada_origem} → ${t.parada_destino}`);
+      values = top.map(t => Number(t.media_pessoas));
+    }
+
+    chartLinhaTrechos = new Chart(ctxT, {
+      type: 'bar',
+      data: { labels, datasets: [{
+        label: usedRouteOrder ? 'Média de Pessoas (ordem da rota)' : 'Média de Pessoas (top trechos)',
+        data: values, backgroundColor: 'rgba(234,179,8,.6)', borderColor: 'rgba(234,179,8,1)', borderWidth: 2
+      }]},
+      options: {
+        indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+        scales: { x: { beginAtZero: true, title: { display: true, text: 'Pessoas' } } },
+        plugins: { legend: { display: false } }
+      }
+    });
+  }
+
+  // Destaque: trecho mais lotado
+  const highlight = document.getElementById('linhaHighlight');
+  if (highlight) {
+    if (trechos && trechos.length) {
+      // escolher pelo maior max_pessoas (prioriza picos)
+      const best = [...trechos].sort((a,b) => Number(b.max_pessoas) - Number(a.max_pessoas))[0];
+      highlight.style.display = '';
+      highlight.className = 'alert alert-warning mb-3';
+      highlight.innerHTML = `
+        <strong>Trecho mais lotado:</strong> ${best.parada_origem} → ${best.parada_destino || 'Fim'}
+        &nbsp;|&nbsp; <strong>Média:</strong> ${Number(best.media_pessoas).toFixed(1)}
+        &nbsp;|&nbsp; <strong>Pico:</strong> ${best.max_pessoas}
+        &nbsp;|&nbsp; <strong>Registros:</strong> ${best.total_registros}
+      `;
+    } else {
+      highlight.style.display = 'none';
+    }
+  }
+}
+
+// --- Fim do bloco de análise por linha ---
 
 async function updateSummaryCards() {
   const [linhas, onibus, viagens, paradas] = await Promise.all([
@@ -97,30 +259,36 @@ async function updateChartTrechosLotados() {
   const data = await fetchData('/analytics/lotacao-por-trecho');
   if (!data || data.length === 0) return;
   const top10 = data.slice(0, 10);
-  const ctx = document.getElementById('chartTrechosLotados').getContext('2d');
+  const ctxElem = document.getElementById('chartTrechosLotados');
+  if (!ctxElem) return;
+  const ctx = ctxElem.getContext('2d');
   if (chartTrechosLotados) chartTrechosLotados.destroy();
   chartTrechosLotados = new Chart(ctx, {
     type: 'bar',
     data: {
-      labels: top10.map(d => `${d.parada_origem} → ${d.parada_destino}`),
+      labels: top10.map(function(d) { return d.parada_origem + ' → ' + (d.parada_destino || ''); }),
       datasets: [{
         label: 'Média de Pessoas',
-        data: top10.map(d => Number(d.media_pessoas)),
+        data: top10.map(function(d) { return Number(d.media_pessoas); }),
         backgroundColor: 'rgba(255,159,64,.6)',
         borderColor: 'rgba(255,159,64,1)',
         borderWidth: 2
       }]
     },
     options: {
-      indexAxis: 'y', responsive: true, maintainAspectRatio: true,
-      scales: { x: { beginAtZero: true, title: { display: true, text: 'Número de Pessoas' } } },
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: true,
+      scales: {
+        x: { beginAtZero: true, title: { display: true, text: 'Número de Pessoas' } }
+      },
       plugins: {
         legend: { display: false },
         tooltip: {
           callbacks: {
-            afterLabel: (ctx) => {
-              const i = ctx.dataIndex;
-              return `Máximo: ${top10[i].max_pessoas}\nRegistros: ${top10[i].total_registros}`;
+            afterLabel: function(ctx) {
+              var i = ctx.dataIndex;
+              return ['Máximo: ' + top10[i].max_pessoas, 'Registros: ' + top10[i].total_registros];
             }
           }
         }
@@ -196,6 +364,7 @@ async function updateDashboard() {
   await updateChartTrechosLotados();
   await updateRegistrosTable();
   await updateMapaLotacao();
+  await populateLinhasSelect();
 }
 
 document.addEventListener('DOMContentLoaded', () => {

@@ -14,3 +14,13 @@ def por_trecho():
 @analytics_bp.get("/lotacao-horaria")
 def horaria():
     data, status = ctl.lotacao_horaria(); return jsonify(data), status
+
+@analytics_bp.get("/linha/<int:id_linha>/horaria")
+def horaria_linha(id_linha: int):
+    data, status = ctl.lotacao_horaria_por_linha(id_linha)
+    return jsonify(data), status
+
+@analytics_bp.get("/linha/<int:id_linha>/trechos")
+def trechos_linha(id_linha: int):
+    data, status = ctl.trechos_por_linha(id_linha)
+    return jsonify(data), status

@@ -8,6 +8,7 @@ def home():
     ctx = ctl.dashboard()
     return render_template("dashboard.html", **ctx)
 
+
 @pages_bp.post("/onibus")
 def criar_onibus():
     form = request.form.to_dict()

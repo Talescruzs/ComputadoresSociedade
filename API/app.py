@@ -35,6 +35,7 @@ def create_app():
     from API.routes.viagem_routes import viagem_bp
     from API.routes.lotacao_routes import lotacao_bp
     from API.routes.analytics_routes import analytics_bp
+    from API.routes.rota_routes import rota_bp  # <--- novo
 
     app.register_blueprint(system_bp)
     app.register_blueprint(onibus_bp, url_prefix="/api/onibus")
@@ -43,6 +44,7 @@ def create_app():
     app.register_blueprint(viagem_bp, url_prefix="/api/viagens")
     app.register_blueprint(lotacao_bp, url_prefix="/api/lotacao")
     app.register_blueprint(analytics_bp, url_prefix="/api/analytics")
+    app.register_blueprint(rota_bp, url_prefix="/api")  # <--- novo
     return app
 
 if __name__ == "__main__":

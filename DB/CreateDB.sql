@@ -1,5 +1,5 @@
-CREATE DATABASE IF NOT EXISTS transporte;
-USE transporte;
+CREATE DATABASE IF NOT EXISTS banco_atu;
+USE banco_atu;
 
 -- ==============================
 -- Tabela: Onibus
@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS Rota (
     id_rota INT AUTO_INCREMENT PRIMARY KEY,
     id_linha INT NOT NULL,
     id_parada INT NOT NULL,
+    ordem INT,
     FOREIGN KEY (id_linha) REFERENCES Linha(id_linha),
     FOREIGN KEY (id_parada) REFERENCES Parada(id_parada)
 );

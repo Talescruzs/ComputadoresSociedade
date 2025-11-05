@@ -9,6 +9,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 import mysql.connector
 from mysql.connector import Error
+import re  # <-- adicionar
 
 def load_env():
     # Novo: procurar .env na raiz e fallback para code/.env
@@ -50,12 +51,23 @@ def _remove_db_directives(sql: str):
 
 def exec_sql_file(cursor, sql_path: Path):
     with sql_path.open("r", encoding="utf-8") as f:
-        sql = f.read()
-    sql = _remove_db_directives(sql)
-    if not sql.strip():
+        raw = f.read()
+    # remove CREATE DATABASE/USE
+    raw = _remove_db_directives(raw)
+    if not raw.strip():
         return
-    for _ in cursor.execute(sql, multi=True):
-        pass
+    # remover comentários de bloco /* ... */ e de linha -- ...
+    no_block = re.sub(r"/\*.*?\*/", "", raw, flags=re.S)
+    lines = []
+    for line in no_block.splitlines():
+        line = re.sub(r"--.*", "", line).strip()
+        if line:
+            lines.append(line)
+    sql_clean = "\n".join(lines)
+    # executar statements individualmente (sem multi=True)
+    statements = [stmt.strip() for stmt in sql_clean.split(";") if stmt.strip()]
+    for stmt in statements:
+        cursor.execute(stmt)
 
 def table_exists(cursor, db_name, table_name):
     cursor.execute(
@@ -110,6 +122,46 @@ def add_fk_if_missing(cursor, db_name, table, constraint_name, col, ref_table, r
             f"REFERENCES `{ref_table}`(`{ref_col}`)"
         )
 
+def drop_fk_by_names(cursor, db_name: str, names: list[str]):
+    if not names:
+        return
+    fmt = ",".join(["%s"] * len(names))
+    cursor.execute(
+        f"""
+        SELECT table_name, constraint_name
+        FROM information_schema.referential_constraints
+        WHERE constraint_schema=%s AND constraint_name IN ({fmt})
+        """,
+        (db_name, *names),
+    )
+    rows = cursor.fetchall() or []
+    for table_name, constraint_name in rows:
+        try:
+            cursor.execute(f"ALTER TABLE `{table_name}` DROP FOREIGN KEY `{constraint_name}`")
+            # print(f"Dropped FK {constraint_name} on {table_name}")
+        except Error:
+            pass
+
+# Novo: dropa todas as FKs das tabelas informadas (idempotente)
+def drop_all_fks_for_tables(cursor, db_name: str, table_names: list[str]):
+    if not table_names:
+        return
+    fmt = ",".join(["%s"] * len(table_names))
+    cursor.execute(
+        f"""
+        SELECT table_name, constraint_name
+        FROM information_schema.referential_constraints
+        WHERE constraint_schema=%s AND table_name IN ({fmt})
+        """,
+        (db_name, *table_names),
+    )
+    rows = cursor.fetchall() or []
+    for table_name, constraint_name in rows:
+        try:
+            cursor.execute(f"ALTER TABLE `{table_name}` DROP FOREIGN KEY `{constraint_name}`")
+        except Error:
+            pass
+
 def align_schema_for_api(cursor, db_name):
     # Renomear tabelas CamelCase -> minúsculas (compatível com as queries da API)
     rename_table_if_needed(cursor, db_name, "Onibus", "onibus")
@@ -147,6 +199,10 @@ def align_schema_for_api(cursor, db_name):
         except Error:
             pass
 
+    # Garantir coluna 'esta_ativa' em 'rota' (usada pelos scripts de rota *.sql)
+    if table_exists(cursor, db_name, "rota"):
+        add_column_if_missing(cursor, db_name, "rota", "esta_ativa TINYINT(1) NOT NULL DEFAULT 1")
+
 def main():
     parser = argparse.ArgumentParser(description="Inicializa o banco MySQL com base no CreateDB.sql")
     parser.add_argument("--sql", default=str(Path(__file__).parents[1] / "DB" / "CreateDB.sql"), help="Caminho para o arquivo SQL")
@@ -172,6 +228,13 @@ def main():
         conn.close()
         conn = get_conn(include_db=True)
         cur = conn.cursor()
+
+        # Evitar erro 1826 (FK duplicada) antes de executar o script SQL
+        # 1) Drop por nome conhecido (compatível com auto-nomes do MySQL)
+        drop_fk_by_names(cur, db_name, ["Viagem_ibfk_1", "Viagem_ibfk_2", "Rota_ibfk_1", "Rota_ibfk_2", "RegistroLotacao_ibfk_1", "RegistroLotacao_ibfk_2"])
+        # 2) Drop genérico de todas as FKs das tabelas criadas pelo CreateDB.sql (CamelCase)
+        drop_all_fks_for_tables(cur, db_name, ["Viagem", "RegistroLotacao", "Rota"])
+        conn.commit()
 
         # Executar SQL (sem CREATE DATABASE/USE)
         exec_sql_file(cur, sql_path)

@@ -121,6 +121,52 @@
     <div class="row mb-4">
       <div class="col-md-12">
         <div class="card">
+          <div class="card-header bg-dark text-white d-flex align-items-center justify-content-between">
+            <h5 class="mb-0">Análise por Linha</h5>
+            <div class="d-flex align-items-center" style="gap:12px;">
+              <label for="selectLinha" class="mb-0">Linha:</label>
+              <select id="selectLinha" class="form-select" style="min-width:260px"></select>
+            </div>
+          </div>
+          <div class="card-body">
+            <div id="linhaHighlight" class="alert alert-info mb-3" role="alert" style="display:none;"></div>
+            <div class="row">
+              <div class="col-md-6">
+                <div class="chart-container">
+                  <canvas id="chartLinhaHoraria"></canvas>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="chart-container">
+                  <canvas id="chartLinhaTrechos"></canvas>
+                </div>
+              </div>
+            </div>
+            <!-- Tabela da rota ordenada da linha selecionada -->
+            <div class="mt-4">
+              <h6>Paradas na ordem da rota</h6>
+              <div class="table-responsive">
+                <table class="table table-sm table-striped">
+                  <thead>
+                    <tr>
+                      <th style="width:80px">Ordem</th>
+                      <th>Parada</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tabelaRotaLinha">
+                    <tr><td colspan="2" class="text-center">Carregando...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row mb-4">
+      <div class="col-md-12">
+        <div class="card">
           <div class="card-header bg-dark text-white">
             <h5>Mapa de Lotação por Linha</h5>
           </div>
