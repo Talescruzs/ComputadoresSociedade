@@ -6,7 +6,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 try:
-    from flask import Flask
+    from flask import Flask, request
     from flask_cors import CORS
     from dotenv import load_dotenv
 except ModuleNotFoundError as e:
@@ -52,9 +52,15 @@ def create_app():
     # Expor API_BASE_URL aos templates
     @app.context_processor
     def inject_api_base():
-        return {
-            "API_BASE_URL": os.getenv("API_BASE_URL", "http://localhost:5000/api").rstrip("/")
-        }
+        # Se API_BASE_URL não vier do ambiente, monta dinamicamente com base no host acessado
+        env_base = os.getenv("API_BASE_URL")
+        if env_base:
+            return {"API_BASE_URL": env_base.rstrip("/")}
+        host = request.host.split(":")[0] if request.host else "localhost"
+        scheme = "https" if request.is_secure else "http"
+        api_port = os.getenv("API_PORT", "5000")
+        dynamic_base = f"{scheme}://{host}:{api_port}/api"
+        return {"API_BASE_URL": dynamic_base.rstrip("/")}
 
     from FRONT.routes.pages_routes import pages_bp
     app.register_blueprint(pages_bp)

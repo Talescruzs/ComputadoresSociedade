@@ -24,17 +24,30 @@ def get_conn():
 def rota_por_linha(id_linha: int):
     """
     Retorna a rota (paradas em ordem) da linha.
-    Campos: id_parada, parada_nome, localizacao, ordem
+    Campos: id_parada, parada_nome, localizacao, ordem, avg_minutos
     """
     sql = """
         SELECT
             p.id_parada,
             p.nome AS parada_nome,
             p.localizacao,
-            r.ordem
+            r.ordem,
+            CASE
+              WHEN r.ordem = 0 THEN 0
+              ELSE GREATEST(0, ROUND(AVG(TIMESTAMPDIFF(
+                    MINUTE,
+                    DATE_ADD(DATE(v.data_hora_inicio), INTERVAL 7 HOUR),  -- base 07:00 no dia da viagem
+                    rl.data_hora                                         -- chegada na parada (destino)
+              ))))
+            END AS avg_minutos
         FROM rota r
         JOIN parada p ON p.id_parada = r.id_parada
+        LEFT JOIN registro_lotacao rl
+               ON rl.id_parada_destino = p.id_parada
+        LEFT JOIN viagem v
+               ON v.id_viagem = rl.id_viagem AND v.id_linha = r.id_linha
         WHERE r.id_linha = %s
+        GROUP BY p.id_parada, p.nome, p.localizacao, r.ordem
         ORDER BY r.ordem ASC, p.id_parada ASC
     """
     conn = get_conn(); cur = conn.cursor(dictionary=True)

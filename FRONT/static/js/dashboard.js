@@ -1,5 +1,5 @@
 // Configuração da API (usa variável injetada ou fallback)
-const API_URL = (window.API_BASE || 'http://localhost:5000/api').replace(/\/+$/,'');
+const API_URL = (window.API_BASE || `${location.protocol}//${location.hostname}:${(window.API_PORT || 5000)}/api`).replace(/\/+$/,'');
 
 // Variáveis globais para os gráficos
 let chartLotacaoPorLinha = null;
@@ -27,25 +27,23 @@ async function fetchData(endpoint) {
 
 // Tenta obter a rota ordenada da linha
 async function fetchRouteForLine(idLinha) {
-  const tryPaths = [
-    `/linhas/${idLinha}/rota`,
-    `/linha/${idLinha}/rota`,
-    `/rotas?linha_id=${idLinha}`
-  ];
-  for (const p of tryPaths) {
-    const data = await fetchData(p);
+  try {
+    const data = await fetchData(`/linhas/${idLinha}/rota`);
     if (Array.isArray(data) && data.length) {
       return data
         .map(x => ({
-          id_parada: x.id_parada ?? x.parada_id ?? x.id ?? null,
-          nome: x.parada_nome ?? x.nome ?? x.parada ?? '',
-          ordem: x.ordem ?? x.order ?? null
+          id_parada: x.id_parada ?? null,
+          nome: x.parada_nome ?? '',
+          ordem: x.ordem ?? null,
+          avg_minutos: x.avg_minutos ?? null
         }))
         .sort((a, b) => {
           if (a.ordem == null || b.ordem == null) return 0;
           return a.ordem - b.ordem;
         });
     }
+  } catch (e) {
+    console.warn('Falha ao buscar rota da linha', idLinha, e);
   }
   return [];
 }
@@ -54,18 +52,25 @@ async function fetchRouteForLine(idLinha) {
 async function updateLinhaRotaTable(idLinha) {
   const tbody = document.getElementById('tabelaRotaLinha');
   if (!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="2" class="text-center">Carregando...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="3" class="text-center">Carregando...</td></tr>';
   const rota = await fetchRouteForLine(idLinha);
   if (!rota || rota.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="2" class="text-center">Rota não encontrada para esta linha</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="3" class="text-center">Rota não encontrada para esta linha</td></tr>';
     return;
   }
-  tbody.innerHTML = rota.map(r => `
-    <tr>
-      <td>${(typeof r.ordem === 'number' ? r.ordem + 1 : '')}</td>
-      <td>${r.nome}</td>
-    </tr>
-  `).join('');
+  tbody.innerHTML = rota.map(r => {
+    const ordem = (typeof r.ordem === 'number' ? r.ordem + 1 : '');
+    // Fallback: se não houver avg_minutos, estima por ordem*5
+    const minutos = Number.isFinite(r.avg_minutos) ? r.avg_minutos : (typeof r.ordem === 'number' ? r.ordem * 5 : null);
+    const tempoTxt = Number.isFinite(minutos) ? `${minutos} min` : '—';
+    return `
+      <tr>
+        <td>${ordem}</td>
+        <td>${r.nome}</td>
+        <td>${tempoTxt}</td>
+      </tr>
+    `;
+  }).join('');
 }
 
 // --- Bloco: análise por linha selecionada ---
@@ -285,7 +290,7 @@ function buildLastTsMap(recentes) {
 function buildTrechosArrays(top10, capMax) {
   const labels = top10.map(d => `${d.parada_origem} → ${d.parada_destino || ''}`);
   const medias = top10.map(d => Number(d.media_pessoas) || 0);
-  const ocupacoes = medias.map(m => Math.min((capMax > 0 ? (m / capMax) * 100 : 0), 100));
+  const ocupacoes = medias.map(m => Math.min((capMax > 0 ? (m / capMax) * 100 : 0), 200));
   return { labels, medias, ocupacoes };
 }
 
@@ -314,7 +319,7 @@ function renderTrechosChart(labels, ocupacoes, medias, top10, capMax, lastTsMap)
       scales: {
         x: {
           beginAtZero: true,
-          max: 100,
+          max: 200,
           title: { display: true, text: '% Ocupação (média pessoas / capacidade do ônibus)' },
           ticks: { callback: (v) => `${v}%` }
         }

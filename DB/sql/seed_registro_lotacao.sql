@@ -8,18 +8,28 @@ SELECT
   v.id_viagem,
   r1.id_parada AS id_parada_origem,
   r2.id_parada AS id_parada_destino,
-  -- Base de tempo: início da viagem + 5 minutos por ordem da parada na rota
+  -- Base de tempo fixa: 07:00 do dia da viagem + 5 minutos por ordem
   DATE_ADD(
-    COALESCE(v.data_hora_inicio, NOW()),
+    DATE_ADD(DATE(COALESCE(v.data_hora_inicio, NOW())), INTERVAL 7 HOUR),
     INTERVAL (r1.ordem * 5) MINUTE
   ) AS data_hora,
-  -- Lotação: maior em horários de pico (7-9h e 17-19h), usando a mesma base de tempo (5 min * ordem)
+  -- Lotação: maior em horários de pico (7-9h e 17-19h), usando a mesma base de tempo
   CAST(
     CASE
-      WHEN HOUR(DATE_ADD(COALESCE(v.data_hora_inicio, NOW()), INTERVAL (r1.ordem * 5) MINUTE)) BETWEEN 7 AND 9
-        OR HOUR(DATE_ADD(COALESCE(v.data_hora_inicio, NOW()), INTERVAL (r1.ordem * 5) MINUTE)) BETWEEN 17 AND 19
-      THEN 30 + (RAND() * 30)  -- pico: 30..60
-      ELSE 10 + (RAND() * 25)  -- normal: 10..35
+      WHEN HOUR(
+        DATE_ADD(
+          DATE_ADD(DATE(COALESCE(v.data_hora_inicio, NOW())), INTERVAL 7 HOUR),
+          INTERVAL (r1.ordem * 5) MINUTE
+        )
+      ) BETWEEN 7 AND 9
+        OR HOUR(
+        DATE_ADD(
+          DATE_ADD(DATE(COALESCE(v.data_hora_inicio, NOW())), INTERVAL 7 HOUR),
+          INTERVAL (r1.ordem * 5) MINUTE
+        )
+      ) BETWEEN 17 AND 19
+      THEN 30 + (RAND() * 50)  -- pico: 30..80
+      ELSE 10 + (RAND() * 30)  -- normal: 10..40
     END AS UNSIGNED
   ) AS qtd_pessoas,
   r2.id_parada AS id_parada  -- preenche coluna legada com o destino
