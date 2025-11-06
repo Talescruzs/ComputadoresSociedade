@@ -1,32 +1,40 @@
--- Vincula cada ônibus a uma viagem em alguma linha que possua rota (>= 2 paradas).
--- Idempotente: não cria nova viagem se já existir uma para o ônibus.
+-- Seed determinístico: cria 1 viagem por par (ônibus, linha elegível) na ordem dos IDs.
+-- Sem aleatoriedade. Garante data_hora_inicio (NOT NULL) e idempotência.
 
--- Garante que exista ao menos uma linha elegível
-SET @eligible_count := (
-  SELECT COUNT(*) FROM (
+-- Linhas elegíveis: possuem rota com pelo menos 2 paradas
+DROP TEMPORARY TABLE IF EXISTS tmp_lines;
+SET @r2 := 0;
+CREATE TEMPORARY TABLE tmp_lines AS
+SELECT t.id_linha, (@r2 := @r2 + 1) AS rn
+FROM (
+  SELECT l.id_linha
+  FROM linha l
+  WHERE l.id_linha IN (
     SELECT r.id_linha
     FROM rota r
     GROUP BY r.id_linha
     HAVING COUNT(*) >= 2
-  ) t
-);
+  )
+  ORDER BY l.id_linha
+) AS t;
 
--- Insere 1 viagem por ônibus, escolhendo uma linha elegível aleatória
-INSERT INTO viagem (id_onibus, id_linha)
+-- Ônibus ordenados por id
+DROP TEMPORARY TABLE IF EXISTS tmp_buses;
+SET @r1 := 0;
+CREATE TEMPORARY TABLE tmp_buses AS
+SELECT o.id_onibus, (@r1 := @r1 + 1) AS rn
+FROM (
+  SELECT @r1 := 0
+) vars, onibus o
+ORDER BY o.id_onibus;
+
+-- Inserir 1 viagem por par (ônibus, linha) de mesmo índice (rn), até o mínimo entre as contagens
+INSERT INTO viagem (id_onibus, id_linha, data_hora_inicio)
 SELECT
-  o.id_onibus,
-  (
-    SELECT l.id_linha
-    FROM linha l
-    WHERE l.id_linha IN (
-      SELECT r.id_linha
-      FROM rota r
-      GROUP BY r.id_linha
-      HAVING COUNT(*) >= 2
-    )
-    ORDER BY RAND()
-    LIMIT 1
-  ) AS id_linha
-FROM onibus o
-WHERE @eligible_count > 0
-  AND NOT EXISTS (SELECT 1 FROM viagem v WHERE v.id_onibus = o.id_onibus);
+  b.id_onibus,
+  l.id_linha,
+  NOW() AS data_hora_inicio
+FROM tmp_buses b
+JOIN tmp_lines l USING (rn)
+WHERE NOT EXISTS (SELECT 1 FROM viagem v WHERE v.id_onibus = b.id_onibus)
+  AND NOT EXISTS (SELECT 1 FROM viagem v2 WHERE v2.id_linha = l.id_linha);

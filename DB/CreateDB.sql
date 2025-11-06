@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS Viagem (
     id_viagem INT AUTO_INCREMENT PRIMARY KEY,
     id_onibus INT NOT NULL,
     id_linha INT NOT NULL,
+    data_hora_inicio DATETIME NOT NULL,
     FOREIGN KEY (id_onibus) REFERENCES Onibus(id_onibus),
     FOREIGN KEY (id_linha) REFERENCES Linha(id_linha)
 );

@@ -255,21 +255,53 @@ async function updateChartLotacaoHoraria() {
   });
 }
 
-async function updateChartTrechosLotados() {
-  const data = await fetchData('/analytics/lotacao-por-trecho');
-  if (!data || data.length === 0) return;
-  const top10 = data.slice(0, 10);
+// Helpers para "Top 10 Trechos Mais Lotados"
+async function fetchTrechosDependencies() {
+  const [trechosAgg, onibus, recentes] = await Promise.all([
+    fetchData('/analytics/lotacao-por-trecho'),
+    fetchData('/onibus'),
+    fetchData('/lotacao')
+  ]);
+  return { trechosAgg: Array.isArray(trechosAgg) ? trechosAgg : [], onibus: Array.isArray(onibus) ? onibus : [], recentes: Array.isArray(recentes) ? recentes : [] };
+}
+
+function getCapacidadeReferencia(onibus) {
+  if (!onibus || !onibus.length) return 60;
+  const caps = onibus.map(o => Number(o.capacidade || 0)).filter(v => Number.isFinite(v) && v > 0);
+  return caps.length ? Math.max(...caps) : 60;
+}
+
+function buildLastTsMap(recentes) {
+  const lastTsMap = new Map();
+  for (const r of recentes) {
+    const key = `${r.linha_nome || ''}>>>${r.parada_origem_nome || ''}>>>${r.parada_destino_nome || ''}`;
+    const ts = new Date(r.data_hora).getTime() || 0;
+    const cur = lastTsMap.get(key);
+    if (!cur || ts > cur) lastTsMap.set(key, ts);
+  }
+  return lastTsMap;
+}
+
+function buildTrechosArrays(top10, capMax) {
+  const labels = top10.map(d => `${d.parada_origem} → ${d.parada_destino || ''}`);
+  const medias = top10.map(d => Number(d.media_pessoas) || 0);
+  const ocupacoes = medias.map(m => Math.min((capMax > 0 ? (m / capMax) * 100 : 0), 100));
+  return { labels, medias, ocupacoes };
+}
+
+function renderTrechosChart(labels, ocupacoes, medias, top10, capMax, lastTsMap) {
   const ctxElem = document.getElementById('chartTrechosLotados');
   if (!ctxElem) return;
   const ctx = ctxElem.getContext('2d');
   if (chartTrechosLotados) chartTrechosLotados.destroy();
+
   chartTrechosLotados = new Chart(ctx, {
     type: 'bar',
     data: {
-      labels: top10.map(function(d) { return d.parada_origem + ' → ' + (d.parada_destino || ''); }),
+      labels,
       datasets: [{
-        label: 'Média de Pessoas',
-        data: top10.map(function(d) { return Number(d.media_pessoas); }),
+        label: 'Ocupação média (%) por trecho',
+        data: ocupacoes,
         backgroundColor: 'rgba(255,159,64,.6)',
         borderColor: 'rgba(255,159,64,1)',
         borderWidth: 2
@@ -280,15 +312,35 @@ async function updateChartTrechosLotados() {
       responsive: true,
       maintainAspectRatio: true,
       scales: {
-        x: { beginAtZero: true, title: { display: true, text: 'Número de Pessoas' } }
+        x: {
+          beginAtZero: true,
+          max: 100,
+          title: { display: true, text: '% Ocupação (média pessoas / capacidade do ônibus)' },
+          ticks: { callback: (v) => `${v}%` }
+        }
       },
       plugins: {
         legend: { display: false },
         tooltip: {
           callbacks: {
-            afterLabel: function(ctx) {
-              var i = ctx.dataIndex;
-              return ['Máximo: ' + top10[i].max_pessoas, 'Registros: ' + top10[i].total_registros];
+            label: (ctx) => `Ocupação: ${ctx.parsed.x.toFixed(1)}%`,
+            afterLabel: (ctx) => {
+              const i = ctx.dataIndex;
+              const media = medias[i];
+              const max = top10[i].max_pessoas;
+              const regs = top10[i].total_registros;
+              const linha = top10[i].linha_nome || '—';
+              const key = `${linha}>>>${top10[i].parada_origem || ''}>>>${top10[i].parada_destino || ''}`;
+              const ts = lastTsMap.get(key);
+              const when = ts ? new Date(ts).toLocaleString('pt-BR') : '—';
+              return [
+                `Linha: ${linha}`,
+                `Horário recente: ${when}`,
+                `Média de pessoas: ${Number.isFinite(media) ? media.toFixed(1) : '0.0'}`,
+                `Capacidade ref.: ${capMax}`,
+                `Máximo observado: ${max}`,
+                `Registros: ${regs}`
+              ];
             }
           }
         }
@@ -297,15 +349,47 @@ async function updateChartTrechosLotados() {
   });
 }
 
-async function updateRegistrosTable() {
-  const data = await fetchData('/lotacao');
+// Substitui a função por uma versão enxuta que usa os helpers acima
+async function updateChartTrechosLotados() {
+  const { trechosAgg, onibus, recentes } = await fetchTrechosDependencies();
+  if (!trechosAgg.length) return;
+
+  const capMax = getCapacidadeReferencia(onibus);
+  const lastTsMap = buildLastTsMap(recentes);
+
+  const top10 = trechosAgg.slice(0, 10);
+  const { labels, medias, ocupacoes } = buildTrechosArrays(top10, capMax);
+
+  renderTrechosChart(labels, ocupacoes, medias, top10, capMax, lastTsMap);
+}
+
+let registrosDataCache = [];
+let registrosSort = { key: 'data_hora', dir: 'desc' }; // padrão: mais recentes primeiro
+
+function compareReg(a, b, key) {
+  // Conversões por tipo de coluna
+  if (key === 'data_hora') {
+    const da = new Date(a.data_hora).getTime() || 0;
+    const db = new Date(b.data_hora).getTime() || 0;
+    return da - db;
+  }
+  if (key === 'qtd_pessoas') {
+    return Number(a.qtd_pessoas || 0) - Number(b.qtd_pessoas || 0);
+  }
+  // strings: linha_nome, parada_origem_nome, parada_destino_nome
+  const sa = String(a[key] ?? '').toLocaleLowerCase('pt-BR');
+  const sb = String(b[key] ?? '').toLocaleLowerCase('pt-BR');
+  return sa.localeCompare(sb, 'pt-BR');
+}
+
+function renderRegistrosTable(rows) {
   const tbody = document.getElementById('tabelaRegistros');
-  if (!data || data.length === 0) {
+  if (!tbody) return;
+  if (!rows || rows.length === 0) {
     tbody.innerHTML = '<tr><td colspan="6" class="text-center">Nenhum registro encontrado</td></tr>';
     return;
   }
-  const recent = data.slice(0, 20);
-  tbody.innerHTML = recent.map(reg => {
+  tbody.innerHTML = rows.slice(0, 20).map(reg => {
     const dh = new Date(reg.data_hora);
     const destino = reg.parada_destino_nome || 'N/A';
     const statusClass = getStatusClass(reg.qtd_pessoas);
@@ -319,6 +403,41 @@ async function updateRegistrosTable() {
         <td><span class="badge bg-info status-badge">${getLotacaoStatus(reg.qtd_pessoas)}</span></td>
       </tr>`;
   }).join('');
+}
+
+function applyRegistrosSortAndRender() {
+  if (!Array.isArray(registrosDataCache)) return;
+  const { key, dir } = registrosSort;
+  const sorted = [...registrosDataCache].sort((a, b) => {
+    const cmp = compareReg(a, b, key);
+    return dir === 'asc' ? cmp : -cmp;
+  });
+  renderRegistrosTable(sorted);
+}
+
+function setupRegistrosSorting() {
+  const ths = document.querySelectorAll('thead th.sortable');
+  ths.forEach(th => {
+    th.style.cursor = 'pointer';
+    th.addEventListener('click', () => {
+      const newKey = th.dataset.sortKey;
+      if (!newKey) return;
+      if (registrosSort.key === newKey) {
+        registrosSort.dir = registrosSort.dir === 'asc' ? 'desc' : 'asc';
+      } else {
+        registrosSort.key = newKey;
+        registrosSort.dir = (newKey === 'data_hora') ? 'desc' : 'asc';
+      }
+      applyRegistrosSortAndRender();
+    });
+  });
+}
+
+async function updateRegistrosTable() {
+  const data = await fetchData('/lotacao');
+  // Substitui rendering direto por cache + sort
+  registrosDataCache = Array.isArray(data) ? data : [];
+  applyRegistrosSortAndRender();
 }
 
 async function updateMapaLotacao() {
@@ -370,4 +489,6 @@ async function updateDashboard() {
 document.addEventListener('DOMContentLoaded', () => {
   updateDashboard();
   setInterval(updateDashboard, 30000);
+  // Novo: habilita ordenação dos cabeçalhos da tabela
+  setupRegistrosSorting();
 });
