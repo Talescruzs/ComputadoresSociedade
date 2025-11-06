@@ -19,3 +19,9 @@ body {
 .chart-container { position: relative; height: 300px; }
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
 .loading { animation: pulse 1.5s infinite; }
+.rota-cadeia {
+  max-width: 420px;
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.4;
+}

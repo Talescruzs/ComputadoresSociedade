@@ -34,11 +34,16 @@ def rota_por_linha(id_linha: int):
             r.ordem,
             CASE
               WHEN r.ordem = 0 THEN 0
-              ELSE GREATEST(0, ROUND(AVG(TIMESTAMPDIFF(
-                    MINUTE,
-                    DATE_ADD(DATE(v.data_hora_inicio), INTERVAL 7 HOUR),  -- base 07:00 no dia da viagem
-                    rl.data_hora                                         -- chegada na parada (destino)
-              ))))
+              ELSE CAST(
+                     GREATEST(
+                       0,
+                       ROUND(AVG(TIMESTAMPDIFF(
+                         MINUTE,
+                         v.data_hora_inicio,
+                         rl.data_hora
+                       )))
+                     ) AS UNSIGNED
+                   )
             END AS avg_minutos
         FROM rota r
         JOIN parada p ON p.id_parada = r.id_parada

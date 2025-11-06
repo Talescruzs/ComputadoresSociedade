@@ -4,7 +4,15 @@ from datetime import datetime
 def list_all():
     conn = get_db_connection(); cur = conn.cursor(dictionary=True)
     cur.execute("""
-        SELECT v.*, o.placa, l.nome as linha_nome
+        SELECT 
+            v.id_viagem,
+            v.id_onibus,
+            v.id_linha,
+            v.data_hora_inicio,
+            v.data_hora_fim,
+            CASE WHEN v.status='em_andamento' THEN 'Ativo' ELSE v.status END AS status,
+            o.placa,
+            l.nome AS linha_nome
         FROM viagem v
         JOIN onibus o ON v.id_onibus = o.id_onibus
         JOIN linha l ON v.id_linha = l.id_linha
@@ -16,7 +24,15 @@ def list_all():
 def get_by_id(id_):
     conn = get_db_connection(); cur = conn.cursor(dictionary=True)
     cur.execute("""
-        SELECT v.*, o.placa, l.nome as linha_nome
+        SELECT 
+            v.id_viagem,
+            v.id_onibus,
+            v.id_linha,
+            v.data_hora_inicio,
+            v.data_hora_fim,
+            CASE WHEN v.status='em_andamento' THEN 'Ativo' ELSE v.status END AS status,
+            o.placa,
+            l.nome AS linha_nome
         FROM viagem v
         JOIN onibus o ON v.id_onibus = o.id_onibus
         JOIN linha l ON v.id_linha = l.id_linha
@@ -32,18 +48,14 @@ def create(payload):
             INSERT INTO viagem (id_onibus, id_linha, data_hora_inicio, data_hora_fim, status)
             VALUES (%s, %s, %s, %s, %s)
         """, (
-            payload["id_onibus"], payload["id_linha"], payload.get("data_hora_inicio", datetime.now()),
-            payload.get("data_hora_fim"), payload.get("status", "em_andamento")
+            payload["id_onibus"],
+            payload["id_linha"],
+            payload.get("data_hora_inicio", datetime.now()),
+            payload.get("data_hora_fim"),
+            payload.get("status", "Ativo")  # alterado de 'Ativa' / 'em_andamento' para 'Ativo'
         ))
         new_id = cur.lastrowid; conn.commit()
-        cur.execute("""
-            SELECT v.*, o.placa, l.nome as linha_nome
-            FROM viagem v
-            JOIN onibus o ON v.id_onibus = o.id_onibus
-            JOIN linha l ON v.id_linha = l.id_linha
-            WHERE v.id_viagem = %s
-        """, (new_id,))
-        return cur.fetchone()
+        return get_by_id(new_id)
     finally:
         cur.close(); conn.close()
 
@@ -51,11 +63,20 @@ def update(id_, payload):
     conn = get_db_connection(); cur = conn.cursor(dictionary=True)
     try:
         cur.execute("""
-            UPDATE viagem SET id_onibus=%s, id_linha=%s, data_hora_inicio=%s, data_hora_fim=%s, status=%s
-            WHERE id_viagem=%s
+            UPDATE viagem 
+               SET id_onibus=%s,
+                   id_linha=%s,
+                   data_hora_inicio=%s,
+                   data_hora_fim=%s,
+                   status=%s
+             WHERE id_viagem=%s
         """, (
-            payload["id_onibus"], payload["id_linha"], payload["data_hora_inicio"],
-            payload.get("data_hora_fim"), payload["status"], id_
+            payload["id_onibus"],
+            payload["id_linha"],
+            payload["data_hora_inicio"],
+            payload.get("data_hora_fim"),
+            "Ativo" if payload.get("status") == "em_andamento" else payload.get("status", "Ativo"),
+            id_
         ))
         conn.commit()
         if cur.rowcount:

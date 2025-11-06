@@ -12,7 +12,7 @@
 <body>
   <nav class="navbar navbar-dark bg-dark mb-4">
     <div class="container-fluid">
-      <span class="navbar-brand mb-0 h1">🚌 Dashboard de Transporte Público</span>
+      <span class="navbar-brand h1" style="margin:0">🚌 Dashboard de Transporte Público</span>
       <span class="text-light" id="lastUpdate"></span>
     </div>
   </nav>
@@ -20,28 +20,34 @@
   <div class="container-fluid">
     <div class="row mb-4">
       <div class="col-md-3">
-        <div class="card bg-primary text-white">
-          <div class="card-body">
-            <h5 class="card-title">Total de Linhas</h5>
-            <h2 class="card-text" id="totalLinhas">-</h2>
+        <a href="/linhas-detalhes" class="text-decoration-none">
+          <div class="card bg-primary text-white" style="cursor:pointer">
+            <div class="card-body">
+              <h5 class="card-title">Total de Linhas</h5>
+              <h2 class="card-text" id="totalLinhas">-</h2>
+            </div>
           </div>
-        </div>
+        </a>
       </div>
       <div class="col-md-3">
-        <div class="card bg-success text-white">
-          <div class="card-body">
-            <h5 class="card-title">Total de Ônibus</h5>
-            <h2 class="card-text" id="totalOnibus">-</h2>
+        <a href="/onibus-detalhes" class="text-decoration-none">
+          <div class="card bg-success text-white" style="cursor:pointer">
+            <div class="card-body">
+              <h5 class="card-title">Total de Ônibus</h5>
+              <h2 class="card-text" id="totalOnibus">-</h2>
+            </div>
           </div>
-        </div>
+        </a>
       </div>
       <div class="col-md-3">
-        <div class="card bg-warning text-white">
-          <div class="card-body">
-            <h5 class="card-title">Viagens Ativas</h5>
-            <h2 class="card-text" id="viagensAtivas">-</h2>
+        <a href="/viagens-detalhes" class="text-decoration-none">
+          <div class="card bg-warning text-white" style="cursor:pointer">
+            <div class="card-body">
+              <h5 class="card-title">Viagens Ativas</h5>
+              <h2 class="card-text" id="viagensAtivas">-</h2>
+            </div>
           </div>
-        </div>
+        </a>
       </div>
       <div class="col-md-3">
         <div class="card bg-info text-white">
@@ -121,9 +127,9 @@
       <div class="col-md-12">
         <div class="card">
           <div class="card-header bg-dark text-white d-flex align-items-center justify-content-between">
-            <h5 class="mb-0">Análise por Linha</h5>
+            <h5 style="margin:0">Análise por Linha</h5>
             <div class="d-flex align-items-center" style="gap:12px;">
-              <label for="selectLinha" class="mb-0">Linha:</label>
+              <label for="selectLinha" style="margin:0">Linha:</label>
               <select id="selectLinha" class="form-select" style="min-width:260px"></select>
             </div>
           </div>
@@ -159,19 +165,6 @@
                 </table>
               </div>
             </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="row mb-4">
-      <div class="col-md-12">
-        <div class="card">
-          <div class="card-header bg-dark text-white">
-            <h5>Mapa de Lotação por Linha</h5>
-          </div>
-          <div class="card-body">
-            <div id="mapaLotacao" class="p-3"></div>
           </div>
         </div>
       </div>

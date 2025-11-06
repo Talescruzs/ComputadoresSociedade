@@ -8,15 +8,25 @@ def home():
     ctx = ctl.dashboard()
     return render_template("dashboard.html", **ctx)
 
-
 @pages_bp.post("/onibus")
 def criar_onibus():
     form = request.form.to_dict()
     ctl.criar_onibus(form)
-    # Redireciona com flag de sucesso (usado pelo toast)
     return redirect(url_for("pages_bp.home", msg="onibus_ok"))
 
-# Nova página de gráficos e correlações
 @pages_bp.get("/insights")
 def insights():
     return render_template("insights.html")
+
+@pages_bp.get("/linhas-detalhes")
+def linhas_detalhes():
+    return render_template("linhas.html")
+
+# Novo: detalhes dos ônibus
+@pages_bp.get("/onibus-detalhes")
+def onibus_detalhes():
+    return render_template("onibus.html")
+
+@pages_bp.get("/viagens-detalhes")
+def viagens_detalhes():
+    return render_template("viagens.html")

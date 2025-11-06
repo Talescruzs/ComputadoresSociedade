@@ -31,12 +31,16 @@ async function fetchRouteForLine(idLinha) {
     const data = await fetchData(`/linhas/${idLinha}/rota`);
     if (Array.isArray(data) && data.length) {
       return data
-        .map(x => ({
-          id_parada: x.id_parada ?? null,
-          nome: x.parada_nome ?? '',
-          ordem: x.ordem ?? null,
-          avg_minutos: x.avg_minutos ?? null
-        }))
+        .map(x => {
+          const ordem = (x.ordem != null ? Number(x.ordem) : null);
+          const avg = (x.avg_minutos != null ? Number(x.avg_minutos) : null);
+          return {
+            id_parada: x.id_parada ?? null,
+            nome: x.parada_nome ?? '',
+            ordem,
+            avg_minutos: (!isNaN(avg) ? avg : null)
+          };
+        })
         .sort((a, b) => {
           if (a.ordem == null || b.ordem == null) return 0;
           return a.ordem - b.ordem;
@@ -59,13 +63,15 @@ async function updateLinhaRotaTable(idLinha) {
     return;
   }
   tbody.innerHTML = rota.map(r => {
-    const ordem = (typeof r.ordem === 'number' ? r.ordem + 1 : '');
-    // Fallback: se não houver avg_minutos, estima por ordem*5
-    const minutos = Number.isFinite(r.avg_minutos) ? r.avg_minutos : (typeof r.ordem === 'number' ? r.ordem * 5 : null);
-    const tempoTxt = Number.isFinite(minutos) ? `${minutos} min` : '—';
+    const ordemVis = (typeof r.ordem === 'number' ? r.ordem + 1 : '');
+    // Usa média vinda da API; se ausente, aplica fallback ordem*5
+    const minutosCalculados = (r.avg_minutos != null && !isNaN(r.avg_minutos))
+      ? r.avg_minutos
+      : (typeof r.ordem === 'number' ? r.ordem * 5 : null);
+    const tempoTxt = (minutosCalculados != null ? `${minutosCalculados} min` : '—');
     return `
       <tr>
-        <td>${ordem}</td>
+        <td>${ordemVis}</td>
         <td>${r.nome}</td>
         <td>${tempoTxt}</td>
       </tr>
@@ -198,7 +204,7 @@ async function updateSummaryCards() {
   if (onibus) document.getElementById('totalOnibus').textContent = onibus.length;
   if (paradas) document.getElementById('totalParadas').textContent = paradas.length;
   if (viagens) {
-    const ativas = viagens.filter(v => v.status === 'em_andamento').length;
+    const ativas = viagens.filter(v => v.status === 'Ativo').length; // alterado
     document.getElementById('viagensAtivas').textContent = ativas;
   }
 }
@@ -228,7 +234,7 @@ async function updateChartLotacaoPorLinha() {
           }
         }
       }
-    }
+  }
   });
 }
 
@@ -445,40 +451,9 @@ async function updateRegistrosTable() {
   applyRegistrosSortAndRender();
 }
 
-async function updateMapaLotacao() {
-  const dataLinhas = await fetchData('/analytics/lotacao-por-linha');
-  const dataTrechos = await fetchData('/analytics/lotacao-por-trecho');
-  if (!dataLinhas || !dataTrechos) return;
-  const mapaDiv = document.getElementById('mapaLotacao');
-  mapaDiv.innerHTML = dataLinhas.map(linha => {
-    const trechos = dataTrechos.filter(t => t.linha_nome === linha.linha_nome);
-    const mediaGeral = Number(linha.media_pessoas);
-    return `
-      <div class="linha-item mb-4" style="background: linear-gradient(90deg, ${getColorByOccupancy(mediaGeral)} 0%, transparent 100%);">
-        <h5 class="mb-3">${linha.linha_nome}</h5>
-        <small>Média: ${mediaGeral.toFixed(1)} pessoas | Máximo: ${linha.max_pessoas} pessoas</small>
-        <div class="mt-3">
-          ${trechos.slice(0,5).map(t => {
-            const media = Number(t.media_pessoas);
-            const percentage = Math.min((media / 60) * 100, 100);
-            return `
-              <div class="trecho">
-                <div class="parada">${t.parada_origem}</div>
-                <div class="barra-lotacao">
-                  <div class="barra-preenchida" style="width:${percentage}%">${media.toFixed(1)} pessoas</div>
-                </div>
-                <div class="parada">${t.parada_destino || 'Fim'}</div>
-                <span class="badge ${getStatusClass(media)} badge-lotacao">${getLotacaoStatus(media)}</span>
-              </div>`;
-          }).join('')}
-        </div>
-      </div>`;
-  }).join('');
-}
-
+// Mantém getStatusClass e getLotacaoStatus (usados em outras partes)
 function getStatusClass(qtd) { if (qtd >= 50) return 'bg-danger'; if (qtd >= 30) return 'bg-warning'; return 'bg-success'; }
 function getLotacaoStatus(qtd) { if (qtd >= 50) return 'Lotado'; if (qtd >= 30) return 'Moderado'; return 'Normal'; }
-function getColorByOccupancy(qtd) { if (qtd >= 50) return '#dc3545'; if (qtd >= 30) return '#ffc107'; return '#28a745'; }
 
 async function updateDashboard() {
   updateTimestamp();
@@ -487,7 +462,6 @@ async function updateDashboard() {
   await updateChartLotacaoHoraria();
   await updateChartTrechosLotados();
   await updateRegistrosTable();
-  await updateMapaLotacao();
   await populateLinhasSelect();
 }
 
