@@ -24,34 +24,29 @@ SET @b := 0;
 CREATE TEMPORARY TABLE tmp_buses AS
 SELECT o.id_onibus, (@b := @b + 1) AS rn
 FROM onibus o
-LEFT JOIN viagem v ON v.id_onibus = o.id_onibus
-WHERE v.id_onibus IS NULL
 ORDER BY o.id_onibus;
 
--- Primeira viagem por linha (ônibus ímpar do par)
-INSERT INTO viagem (id_onibus, id_linha, data_hora_inicio)
-SELECT
-  b1.id_onibus,
-  l.id_linha,
-  TIMESTAMP(CURDATE(), '07:00:00') AS data_hora_inicio
-FROM tmp_lines l
-JOIN tmp_buses b1 ON b1.rn = (l.rn * 2) - 1
-WHERE b1.id_onibus IS NOT NULL
-  AND NOT EXISTS (
-    SELECT 1 FROM viagem v
-    WHERE v.id_onibus = b1.id_onibus AND v.id_linha = l.id_linha
-  );
+SET @bus_count := (SELECT COUNT(*) FROM tmp_buses);
 
--- Segunda viagem por linha (ônibus par do par), com horário deslocado
+-- Gera horas de 06 até 19 (inclusive) sem CTE (compatível com MySQL < 8)
 INSERT INTO viagem (id_onibus, id_linha, data_hora_inicio)
 SELECT
-  b2.id_onibus,
+  b.id_onibus,
   l.id_linha,
-  TIMESTAMP(CURDATE(), '09:00:00') AS data_hora_inicio
+  TIMESTAMP(CURDATE(), CONCAT(LPAD(h.h,2,'0'),':00:00')) AS data_hora_inicio
 FROM tmp_lines l
-JOIN tmp_buses b2 ON b2.rn = (l.rn * 2)
-WHERE b2.id_onibus IS NOT NULL
-  AND NOT EXISTS (
-    SELECT 1 FROM viagem v
-    WHERE v.id_onibus = b2.id_onibus AND v.id_linha = l.id_linha
-  );
+JOIN (
+  SELECT 6 AS h UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9
+  UNION ALL SELECT 10 UNION ALL SELECT 11 UNION ALL SELECT 12 UNION ALL SELECT 13
+  UNION ALL SELECT 14 UNION ALL SELECT 15 UNION ALL SELECT 16 UNION ALL SELECT 17
+  UNION ALL SELECT 18 UNION ALL SELECT 19
+) AS h
+JOIN tmp_buses b
+  ON b.rn = ((l.rn + h.h - 6) % @bus_count) + 1
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM viagem v
+  WHERE v.id_onibus = b.id_onibus
+    AND v.id_linha = l.id_linha
+    AND v.data_hora_inicio = TIMESTAMP(CURDATE(), CONCAT(LPAD(h.h,2,'0'),':00:00'))
+);

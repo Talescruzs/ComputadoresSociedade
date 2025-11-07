@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify, request
 from API.controllers import viagem_controller as ctl
+from API.models import viagem_model  # novo
 
 viagem_bp = Blueprint("viagem_bp", __name__)
 
@@ -22,3 +23,8 @@ def atualizar(id_):
 @viagem_bp.delete("/<int:id_>")
 def deletar(id_):
     data, status = ctl.deletar(id_); return jsonify(data), status
+
+@viagem_bp.get("/<int:id_>/trechos")
+def trechos(id_):
+    rows = viagem_model.list_trechos(id_)
+    return jsonify(rows), 200

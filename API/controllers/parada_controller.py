@@ -21,3 +21,11 @@ def atualizar(id_, payload):
 
 def deletar(id_):
     ok = parada_model.delete(id_); return ({"message": "Parada deletada com sucesso"}, 200) if ok else ({"error": "Parada não encontrada"}, 404)
+
+def listar_pessoas_total():
+    data = parada_model.pessoas_total_por_parada()
+    return data, 200
+
+def listar_pessoas_por_hora(id_parada: int):
+    data = parada_model.pessoas_por_hora_parada(id_parada)
+    return data, 200

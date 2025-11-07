@@ -7,6 +7,18 @@
       <button type="button" class="btn btn-sm btn-light" onclick="history.back()">← Voltar</button>
     </div>
     <div class="card-body">
+      <form class="row g-2 mb-3" id="filtroLinhasForm">
+        <div class="col-auto">
+          <label for="filtroLinhaNome" class="form-label mb-1">Linha</label>
+          <select id="filtroLinhaNome" class="form-select form-select-sm" style="min-width:220px">
+            <option value="">(Todas)</option>
+          </select>
+        </div>
+        <div class="col-auto d-flex align-items-end" style="gap:6px">
+          <button type="button" id="btnFiltrarLinhas" class="btn btn-sm btn-primary">Filtrar</button>
+          <button type="button" id="btnLimparLinhas" class="btn btn-sm btn-secondary">Limpar</button>
+        </div>
+      </form>
       <div class="table-responsive">
         <table class="table table-sm table-striped table-hover align-middle">
           <thead class="table-light">
@@ -15,10 +27,11 @@
               <th data-sort-key="total_paradas" class="sortable">Total de Paradas</th>
               <th data-sort-key="pct_excesso" class="sortable">% Trechos Acima Capacidade</th>
               <th>Rota (sequência de paradas)</th>
+              <th>Ações</th>
             </tr>
           </thead>
           <tbody id="tabelaLinhas">
-            <tr><td colspan="4" class="text-center">Carregando...</td></tr>
+            <tr><td colspan="5" class="text-center">Carregando...</td></tr>
           </tbody>
         </table>
       </div>

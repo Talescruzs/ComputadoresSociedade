@@ -7,6 +7,18 @@
       <button type="button" class="btn btn-sm btn-light" onclick="history.back()">← Voltar</button>
     </div>
     <div class="card-body">
+      <form class="row g-2 mb-3" id="filtroOnibusForm">
+        <div class="col-auto">
+          <label for="filtroOnibusPlaca" class="form-label mb-1">Placa</label>
+          <select id="filtroOnibusPlaca" class="form-select form-select-sm" style="min-width:160px">
+            <option value="">(Todas)</option>
+          </select>
+        </div>
+        <div class="col-auto d-flex align-items-end" style="gap:6px">
+          <button type="button" id="btnFiltrarOnibus" class="btn btn-sm btn-primary">Filtrar</button>
+          <button type="button" id="btnLimparOnibus" class="btn btn-sm btn-secondary">Limpar</button>
+        </div>
+      </form>
       <div class="table-responsive">
         <table class="table table-sm table-striped table-hover align-middle">
           <thead class="table-light">

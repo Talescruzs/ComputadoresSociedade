@@ -12,6 +12,7 @@ async function fetchJSON(ep) {
 }
 
 // Cache e estado de ordenação
+let linhasRaw = []; // novo: cache sem filtro
 let linhasCache = [];
 let linhasSort = { key: 'nome', dir: 'asc' };
 
@@ -31,17 +32,21 @@ function renderLinhasTable(data) {
   const tbody = document.getElementById('tabelaLinhas');
   if (!tbody) return;
   if (!data || data.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="4" class="text-center">Nenhuma linha encontrada</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center">Nenhuma linha encontrada</td></tr>';
     return;
   }
-  tbody.innerHTML = data.map(row => `
-    <tr>
-      <td>${row.nome}</td>
-      <td>${row.total_paradas}</td>
-      <td>${row.pct_excesso}</td>
-      <td class="rota-cadeia">${row.rota_cadeia}</td>
-    </tr>
-  `).join('');
+  tbody.innerHTML = data.map(row => {
+    const linhaEncoded = encodeURIComponent(row.nome);
+    return `
+      <tr>
+        <td>${row.nome}</td>
+        <td>${row.total_paradas}</td>
+        <td>${row.pct_excesso}</td>
+        <td class="rota-cadeia">${row.rota_cadeia}</td>
+        <td><a href="/viagens-detalhes?linha=${linhaEncoded}" class="btn btn-sm btn-outline-primary">Ver viagens</a></td>
+      </tr>
+    `;
+  }).join('');
 }
 
 function applyLinhasSortAndRender() {
@@ -76,10 +81,50 @@ function setupLinhasSorting() {
   });
 }
 
+// Filtros
+function popularSelectLinhas() {
+  const sel = document.getElementById('filtroLinhaNome');
+  if (!sel) return;
+  const nomes = [...new Set(linhasRaw.map(l => l.nome).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  sel.innerHTML = '<option value="">(Todas)</option>' + nomes.map(n=>`<option value="${n}">${n}</option>`).join('');
+}
+
+function getURLPrefill() {
+  const p = new URLSearchParams(location.search);
+  return { linha: p.get('linha') || '' };
+}
+
+function prefillFiltroLinha() {
+  const { linha } = getURLPrefill();
+  if (!linha) return;
+  const sel = document.getElementById('filtroLinhaNome');
+  if (sel) {
+    sel.value = linha;
+    if (sel.value !== linha) console.warn('Linha para prefill não encontrada:', linha);
+  }
+}
+
+function aplicaFiltroLinhas() {
+  const sel = document.getElementById('filtroLinhaNome');
+  const filtro = sel?.value || '';
+  linhasCache = linhasRaw.filter(r => !filtro || r.nome === filtro);
+  applyLinhasSortAndRender();
+}
+
+function setupFiltroLinhasEvents() {
+  document.getElementById('btnFiltrarLinhas')?.addEventListener('click', aplicaFiltroLinhas);
+  document.getElementById('btnLimparLinhas')?.addEventListener('click', () => {
+    const sel = document.getElementById('filtroLinhaNome');
+    if (sel) sel.value = '';
+    aplicaFiltroLinhas();
+  });
+  document.getElementById('filtroLinhaNome')?.addEventListener('change', aplicaFiltroLinhas);
+}
+
 async function loadLinhas() {
   const tbody = document.getElementById('tabelaLinhas');
   if (!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="4" class="text-center">Carregando...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="5" class="text-center">Carregando...</td></tr>';
 
   const [linhas, viagens, onibus, lotacoes] = await Promise.all([
     fetchJSON('/linhas') || [],
@@ -89,7 +134,7 @@ async function loadLinhas() {
   ]);
 
   if (!linhas.length) {
-    tbody.innerHTML = '<tr><td colspan="4" class="text-center">Nenhuma linha encontrada</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center">Nenhuma linha encontrada</td></tr>';
     return;
   }
 
@@ -98,7 +143,6 @@ async function loadLinhas() {
   const linhaPorViagem = new Map(viagens.map(v => [v.id_viagem, v.id_linha]));
   const onibusPorViagem = new Map(viagens.map(v => [v.id_viagem, v.id_onibus]));
 
-  // Agrupar lotações por linha
   const statsLinha = new Map();
   for (const reg of lotacoes || []) {
     const idViagem = reg.id_viagem;
@@ -107,16 +151,12 @@ async function loadLinhas() {
     if (idLinha == null) continue;
     const capacidade = capacidadePorOnibus.get(idOnibus) || 0;
     const qtd = Number(reg.qtd_pessoas || 0);
-
-    if (!statsLinha.has(idLinha)) {
-      statsLinha.set(idLinha, { total: 0, excesso: 0 });
-    }
+    if (!statsLinha.has(idLinha)) statsLinha.set(idLinha, { total: 0, excesso: 0 });
     const stat = statsLinha.get(idLinha);
     stat.total += 1;
     if (capacidade > 0 && qtd > capacidade) stat.excesso += 1;
   }
 
-  // Montar cache final
   const rows = [];
   for (const l of linhas) {
     const rota = await fetchJSON(`/linhas/${l.id_linha}/rota`) || [];
@@ -134,12 +174,16 @@ async function loadLinhas() {
     });
   }
 
-  linhasCache = rows;
-  applyLinhasSortAndRender();
+  // popula filtros e aplica
+  linhasRaw = rows;
+  popularSelectLinhas();
+  prefillFiltroLinha();
+  aplicaFiltroLinhas();
 }
 
 // Inicialização
 document.addEventListener('DOMContentLoaded', () => {
   loadLinhas();
   setupLinhasSorting();
+  setupFiltroLinhasEvents();
 });

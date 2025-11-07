@@ -27,22 +27,24 @@
           </select>
         </div>
         <div class="col-md-3">
-          <label class="form-label mb-1" for="filtroInicioDe">Início (de)</label>
-          <input type="datetime-local" id="filtroInicioDe" class="form-control" />
+          <label class="form-label mb-1" for="filtroDiaDe">Dia (de)</label>
+          <input type="date" id="filtroDiaDe" class="form-control" />
         </div>
         <div class="col-md-3">
-          <label class="form-label mb-1" for="filtroInicioAte">Início (até)</label>
-          <input type="datetime-local" id="filtroInicioAte" class="form-control" />
+          <label class="form-label mb-1" for="filtroDiaAte">Dia (até)</label>
+          <input type="date" id="filtroDiaAte" class="form-control" />
         </div>
-        <div class="col-12 d-flex flex-wrap align-items-center" style="gap:16px">
-          <div class="form-check">
-            <input class="form-check-input" type="checkbox" id="filtroIncluirSemViagem" checked>
-            <label class="form-check-label" for="filtroIncluirSemViagem">Incluir ônibus sem viagens</label>
-          </div>
-          <div class="ms-auto d-flex" style="gap:8px">
-            <button type="button" id="btnAplicarFiltros" class="btn btn-sm btn-primary">Filtrar</button>
-            <button type="button" id="btnLimparFiltros" class="btn btn-sm btn-secondary">Limpar</button>
-          </div>
+        <div class="col-md-3">
+          <label class="form-label mb-1" for="filtroHoraDe">Hora (de)</label>
+          <input type="time" id="filtroHoraDe" class="form-control" />
+        </div>
+        <div class="col-md-3">
+          <label class="form-label mb-1" for="filtroHoraAte">Hora (até)</label>
+          <input type="time" id="filtroHoraAte" class="form-control" />
+        </div>
+        <div class="col-12 d-flex justify-content-end" style="gap:8px">
+          <button type="button" id="btnAplicarFiltros" class="btn btn-sm btn-primary">Filtrar</button>
+          <button type="button" id="btnLimparFiltros" class="btn btn-sm btn-secondary">Limpar</button>
         </div>
       </form>
 
@@ -52,14 +54,15 @@
             <tr>
               <th data-sort-key="linha_nome" class="sortable">Linha</th>
               <th data-sort-key="onibus_placa" class="sortable">Ônibus</th>
-              <th data-sort-key="data_inicio" class="sortable">Início</th>
+              <th data-sort-key="data_inicio" class="sortable">Data/Hora Início</th>
               <th data-sort-key="total_registros" class="sortable">Registros</th>
               <th data-sort-key="pct_excesso" class="sortable">% Acima Cap.</th>
               <th data-sort-key="duracao_min" class="sortable">Duração (min)</th>
+              <th>Ações</th>
             </tr>
           </thead>
           <tbody id="tabelaViagens">
-            <tr><td colspan="6" class="text-center">Carregando...</td></tr>
+            <tr><td colspan="7" class="text-center">Carregando...</td></tr>
           </tbody>
         </table>
       </div>

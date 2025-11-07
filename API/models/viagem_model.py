@@ -90,3 +90,32 @@ def delete(id_):
     cur.execute("DELETE FROM viagem WHERE id_viagem = %s", (id_,))
     affected = cur.rowcount; conn.commit(); cur.close(); conn.close()
     return affected > 0
+
+def list_trechos(id_viagem: int):
+    """
+    Retorna os trechos (registros de lotação) da viagem com capacidade do ônibus.
+    """
+    conn = get_db_connection(); cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("""
+            SELECT
+              rl.id_lotacao,
+              rl.id_viagem,
+              rl.data_hora,
+              rl.qtd_pessoas,
+              po.id_parada AS parada_origem_id,
+              po.nome AS parada_origem_nome,
+              pd.id_parada AS parada_destino_id,
+              pd.nome AS parada_destino_nome,
+              o.capacidade
+            FROM registro_lotacao rl
+            JOIN parada po ON po.id_parada = rl.id_parada_origem
+            LEFT JOIN parada pd ON pd.id_parada = rl.id_parada_destino
+            JOIN viagem v ON v.id_viagem = rl.id_viagem
+            JOIN onibus o ON o.id_onibus = v.id_onibus
+            WHERE rl.id_viagem = %s
+            ORDER BY rl.data_hora ASC, rl.id_lotacao ASC
+        """, (id_viagem,))
+        return cur.fetchall()
+    finally:
+        cur.close(); conn.close()

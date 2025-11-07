@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="bg-light p-3 p-md-4 rounded-3">
+  <div class="card shadow-sm bg-white border-0">
+    <div class="card-header bg-dark text-white d-flex align-items-center justify-content-between">
+      <h5 id="paradaTitulo" style="margin:0">Parada: —</h5>
+      <button type="button" class="btn btn-sm btn-light" onclick="history.back()">← Voltar</button>
+    </div>
+    <div class="card-body">
+      <div id="paradaMsg" class="small text-muted mb-3"></div>
+
+      <!-- Filtros -->
+      <form id="filtroParadaHora" class="row g-3 mb-3">
+        <div class="col-md-3">
+          <label for="filtroLinha" class="form-label mb-1">Linha</label>
+          <select id="filtroLinha" class="form-select form-select-sm">
+            <option value="">(Todas)</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label for="filtroDiaDe" class="form-label mb-1">Dia (de)</label>
+          <input type="date" id="filtroDiaDe" class="form-control form-control-sm" />
+        </div>
+        <div class="col-md-3">
+          <label for="filtroDiaAte" class="form-label mb-1">Dia (até)</label>
+          <input type="date" id="filtroDiaAte" class="form-control form-control-sm" />
+        </div>
+        <div class="col-md-3">
+          <label for="filtroHoraDe" class="form-label mb-1">Hora (de)</label>
+          <input type="time" id="filtroHoraDe" class="form-control form-control-sm" />
+        </div>
+        <div class="col-md-3">
+          <label for="filtroHoraAte" class="form-label mb-1">Hora (até)</label>
+          <input type="time" id="filtroHoraAte" class="form-control form-control-sm" />
+        </div>
+        <div class="col-12 d-flex justify-content-end" style="gap:8px">
+          <button type="button" id="btnAplicarFiltrosPH" class="btn btn-sm btn-primary">Filtrar</button>
+          <button type="button" id="btnLimparFiltrosPH" class="btn btn-sm btn-secondary">Limpar</button>
+        </div>
+      </form>
+
+      <!-- Gráfico em largura total -->
+      <div class="card border-0 mb-4">
+        <div class="card-header bg-secondary text-white">Passageiros por horário (embarques)</div>
+        <div class="card-body">
+          <canvas id="paradaHoraChart" height="220"></canvas>
+        </div>
+      </div>
+
+      <!-- Tabela original por linha (mantida) -->
+      <div class="table-responsive">
+        <table class="table table-sm table-striped table-hover align-middle">
+          <thead class="table-light">
+            <tr>
+              <th>Total por linha</th>
+              <th>Passageiros (hoje)</th>
+              <th>Passageiros (total)</th>
+            </tr>
+          </thead>
+          <tbody id="tabelaParadaLinhas">
+            <tr><td colspan="3" class="text-center">Carregando...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+  </div>
+</section>
+<script src="{{ url_for('static', filename='js/parada_detalhes.js') }}"></script>
+{% endblock %}

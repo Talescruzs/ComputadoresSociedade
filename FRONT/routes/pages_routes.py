@@ -22,7 +22,6 @@ def insights():
 def linhas_detalhes():
     return render_template("linhas.html")
 
-# Novo: detalhes dos ônibus
 @pages_bp.get("/onibus-detalhes")
 def onibus_detalhes():
     return render_template("onibus.html")
@@ -30,3 +29,18 @@ def onibus_detalhes():
 @pages_bp.get("/viagens-detalhes")
 def viagens_detalhes():
     return render_template("viagens.html")
+
+# Novo: detalhes das paradas
+@pages_bp.get("/paradas-detalhes")
+def paradas_detalhes():
+    return render_template("paradas.html")
+
+# Novo: detalhes específicos da parada (por id)
+@pages_bp.get("/paradas-detalhes/<int:id_parada>")
+def parada_detalhes(id_parada: int):
+    return render_template("parada_detalhes.html")
+
+# Novo: detalhes da viagem
+@pages_bp.get("/viagens-detalhes/<int:id_viagem>")
+def viagem_detalhe(id_viagem: int):
+    return render_template("viagem_detalhes.html")

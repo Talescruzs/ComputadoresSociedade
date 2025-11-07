@@ -22,3 +22,14 @@ def atualizar(id_):
 @parada_bp.delete("/<int:id_>")
 def deletar(id_):
     data, status = ctl.deletar(id_); return jsonify(data), status
+
+@parada_bp.get("/pessoas-total")
+def pessoas_total():
+    data, status = ctl.listar_pessoas_total()
+    return jsonify(data), status
+
+# Novo: embarques por hora na parada
+@parada_bp.get("/<int:id_>/pessoas-por-hora")
+def pessoas_por_hora(id_):
+    data, status = ctl.listar_pessoas_por_hora(id_)
+    return jsonify(data), status

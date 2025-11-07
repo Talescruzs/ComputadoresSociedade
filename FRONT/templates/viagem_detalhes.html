@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="bg-light p-3 p-md-4 rounded-3">
+  <div class="card shadow-sm border-0">
+    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+      <h5 id="vdTitulo" style="margin:0">Viagem</h5>
+      <button type="button" class="btn btn-sm btn-light" onclick="history.back()">← Voltar</button>
+    </div>
+    <div class="card-body">
+      <!-- mensagem agora em branco -->
+      <div id="paradaMsg" class="mb-2" style="color:#fff;font-weight:500"></div>
+      <div class="table-responsive">
+        <table class="table table-sm table-striped table-hover align-middle">
+          <thead class="table-light">
+            <tr>
+              <th>Origem</th>
+              <th>Destino</th>
+              <th data-sort-key="data_hora" class="sortable">Data/Hora</th>
+              <th data-sort-key="qtd_pessoas" class="sortable">Pessoas</th>
+              <th data-sort-key="pct_lotacao" class="sortable">% Lotação</th>
+              <th>Barra</th>
+            </tr>
+          </thead>
+          <tbody id="vdTrechos">
+            <tr><td colspan="6" class="text-center">Carregando...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+<script src="{{ url_for('static', filename='js/viagem_detalhes.js') }}"></script>
+{% endblock %}

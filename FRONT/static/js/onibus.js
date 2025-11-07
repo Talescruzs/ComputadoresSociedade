@@ -12,7 +12,42 @@ async function fetchJSON(ep) {
 }
 
 let onibusCache = [];
+let onibusRaw = []; // novo: dados completos sem filtro
 let onibusSort = { key: 'placa', dir: 'asc' };
+let prefillPlaca = ''; // novo
+
+function getURLPrefill() {
+  const p = new URLSearchParams(location.search);
+  prefillPlaca = p.get('placa') || '';
+}
+
+function popularFiltroPlacas() {
+  const sel = document.getElementById('filtroOnibusPlaca');
+  if (!sel) return;
+  const placas = [...new Set(onibusRaw.map(o => o.placa))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  sel.innerHTML = '<option value="">(Todas)</option>' + placas.map(p=>`<option value="${p}">${p}</option>`).join('');
+  if (prefillPlaca) {
+    sel.value = prefillPlaca;
+    if (sel.value !== prefillPlaca) console.warn('Placa para prefill não encontrada:', prefillPlaca);
+  }
+}
+
+function aplicaFiltroOnibus(){
+  const sel = document.getElementById('filtroOnibusPlaca');
+  const placa = sel?.value || '';
+  onibusCache = onibusRaw.filter(o => !placa || o.placa === placa);
+  applyOnibusSortAndRender();
+}
+
+function setupFiltroEvents(){
+  document.getElementById('btnFiltrarOnibus')?.addEventListener('click', aplicaFiltroOnibus);
+  document.getElementById('btnLimparOnibus')?.addEventListener('click', ()=>{
+    const sel = document.getElementById('filtroOnibusPlaca');
+    if (sel) sel.value = '';
+    aplicaFiltroOnibus();
+  });
+  document.getElementById('filtroOnibusPlaca')?.addEventListener('change', aplicaFiltroOnibus);
+}
 
 function compareOnibus(a, b, key) {
   if (key === 'capacidade') return Number(a.capacidade || 0) - Number(b.capacidade || 0);
@@ -88,6 +123,8 @@ async function loadOnibus() {
   ]);
 
   if (!onibus.length) {
+    onibusRaw = [];
+    onibusCache = [];
     tbody.innerHTML = '<tr><td colspan="6" class="text-center">Nenhum ônibus encontrado</td></tr>';
     return;
   }
@@ -123,7 +160,7 @@ async function loadOnibus() {
     }
   }
 
-  onibusCache = onibus.map(o => {
+  onibusRaw = onibus.map(o => {
     const totalReg = totais.get(o.id_onibus) || 0;
     const excReg = excessos.get(o.id_onibus) || 0;
     const pct = totalReg > 0 ? (excReg / totalReg) * 100 : 0;
@@ -138,7 +175,8 @@ async function loadOnibus() {
     };
   });
 
-  applyOnibusSortAndRender();
+  popularFiltroPlacas();
+  aplicaFiltroOnibus();
 }
 
 function formatDate(str) {
@@ -152,6 +190,8 @@ function formatDate(str) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  getURLPrefill();
   loadOnibus();
   setupOnibusSorting();
+  setupFiltroEvents();
 });
