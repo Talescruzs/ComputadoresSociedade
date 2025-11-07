@@ -20,15 +20,31 @@ FROM (
     r1.ordem,
     CAST(
       CASE
-        WHEN HOUR(DATE_ADD(COALESCE(v.data_hora_inicio, NOW()), INTERVAL (r1.ordem * 5) MINUTE)) BETWEEN 7 AND 9
-          OR HOUR(DATE_ADD(COALESCE(v.data_hora_inicio, NOW()), INTERVAL (r1.ordem * 5) MINUTE)) BETWEEN 17 AND 19
-        THEN 30 + (RAND() * 50)  -- pico: 30..80
-        ELSE 10 + (RAND() * 30)  -- normal: 10..40
+        WHEN l.nome = 'UFSM/Vale Machado - Faixa Nova' THEN
+          LEAST(
+            15,
+            ROUND((
+              CASE
+                WHEN HOUR(DATE_ADD(COALESCE(v.data_hora_inicio, NOW()), INTERVAL (r1.ordem * 5) MINUTE)) BETWEEN 7 AND 9
+                  OR HOUR(DATE_ADD(COALESCE(v.data_hora_inicio, NOW()), INTERVAL (r1.ordem * 5) MINUTE)) BETWEEN 17 AND 19
+                THEN 30 + (RAND() * 50)  -- pico: 30..80
+                ELSE 10 + (RAND() * 30)  -- normal: 10..40
+              END
+            ) * 0.35)
+          )
+        ELSE
+          CASE
+            WHEN HOUR(DATE_ADD(COALESCE(v.data_hora_inicio, NOW()), INTERVAL (r1.ordem * 5) MINUTE)) BETWEEN 7 AND 9
+              OR HOUR(DATE_ADD(COALESCE(v.data_hora_inicio, NOW()), INTERVAL (r1.ordem * 5) MINUTE)) BETWEEN 17 AND 19
+            THEN 30 + (RAND() * 50)  -- pico: 30..80
+            ELSE 10 + (RAND() * 30)  -- normal: 10..40
+          END
       END AS UNSIGNED
     ) AS qtd_pessoas
   FROM viagem v
   JOIN rota r1 ON r1.id_linha = v.id_linha
   JOIN rota r2 ON r2.id_linha = v.id_linha AND r2.ordem = r1.ordem + 1
+  JOIN linha l ON l.id_linha = v.id_linha
   LEFT JOIN registro_lotacao rl
          ON rl.id_viagem = v.id_viagem
         AND rl.id_parada_origem = r1.id_parada

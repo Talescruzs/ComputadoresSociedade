@@ -215,7 +215,10 @@ function getURLPrefill() {
   const params = new URLSearchParams(window.location.search);
   return {
     placa: params.get('placa') || '',
-    linha: params.get('linha') || ''
+    linha: params.get('linha') || '',
+    // novo: horários via URL
+    horaDe: params.get('horaDe') || '',
+    horaAte: params.get('horaAte') || ''
   };
 }
 
@@ -235,6 +238,11 @@ function prefillFiltersFromURL() {
       if (selLinha.value !== pre.linha) console.warn('Linha prefill não encontrada:', pre.linha);
     }
   }
+  // novo: preencher horários se vierem na URL (formato HH:MM)
+  const hDe = document.getElementById('filtroHoraDe');
+  const hAte = document.getElementById('filtroHoraAte');
+  if (hDe && pre.horaDe) hDe.value = pre.horaDe;
+  if (hAte && pre.horaAte) hAte.value = pre.horaAte;
 }
 
 // Hora/minuto no fuso de São Paulo (para filtrar por horário corretamente)

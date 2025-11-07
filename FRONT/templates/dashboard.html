@@ -84,42 +84,18 @@
       </div>
     </div>
 
-    <!-- Linha combinada: Top 10 Trechos e Registros Recentes lado a lado -->
+    <!-- Novo: Mapa de calor Hora × Linha -->
     <div class="row mb-4">
-      <div class="col-12 col-lg-6">
+      <div class="col-md-12">
         <div class="card">
           <div class="card-header bg-dark text-white">
-            <h5>Top 10 Trechos Mais Lotados</h5>
+            <h5 style="margin:0">Mapa de calor (Hora × Linha)</h5>
           </div>
           <div class="card-body">
-            <canvas id="chartTrechosLotados"></canvas>
-          </div>
-        </div>
-      </div>
-
-      <div class="col-12 col-lg-6">
-        <div class="card">
-          <div class="card-header bg-dark text-white">
-            <h5>Registros Recentes de Lotação</h5>
-          </div>
-          <div class="card-body">
-            <div class="table-responsive">
-              <table class="table table-striped table-hover">
-                <thead>
-                  <tr>
-                    <th data-sort-key="data_hora" class="sortable">Data/Hora</th>
-                    <th data-sort-key="linha_nome" class="sortable">Linha</th>
-                    <th data-sort-key="parada_origem_nome" class="sortable">Origem</th>
-                    <th data-sort-key="parada_destino_nome" class="sortable">Destino</th>
-                    <th data-sort-key="qtd_pessoas" class="sortable">Qtd. Pessoas</th>
-                    <th data-sort-key="qtd_pessoas" class="sortable">Status</th>
-                  </tr>
-                </thead>
-                <tbody id="tabelaRegistros">
-                  <tr><td colspan="6" class="text-center">Carregando...</td></tr>
-                </tbody>
-              </table>
+            <div id="heatmapDashboard" style="overflow:auto">
+              <div class="text-center small text-muted">Carregando mapa de calor...</div>
             </div>
+            <small class="text-muted">Cores indicam intensidade relativa de lotação média (normalizada).</small>
           </div>
         </div>
       </div>
@@ -171,6 +147,9 @@
         </div>
       </div>
     </div>
+
+    
+
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
