@@ -347,31 +347,54 @@ async function updateChartLotacaoPorLinha() {
   });
 }
 
+// Substituir função horaDB anterior por esta versão expandida:
+function horaDB(str) {
+  if (!str) return null;
+  // Formatos tipo MySQL / ISO local: 2025-11-09 06:00:00 ou 2025-11-09T06:00:00(.ms)(Z)
+  let m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/.exec(str);
+  if (m) return Number(m[4]);
+
+  // Formato RFC/GMT: Thu, 09 Nov 2025 06:00:00 GMT
+  m = /^\w{3},\s\d{2}\s\w{3}\s\d{4}\s(\d{2}):(\d{2}):\d{2}\sGMT$/.exec(str);
+  if (m) return Number(m[1]);
+
+  // Fallback: tenta new Date mas retorna a HORA ORIGINAL do texto, não a local convertida.
+  const d = new Date(str);
+  if (isNaN(d.getTime())) return null;
+  // Se contém 'Z' ou 'GMT', usar getUTCHours; senão usar getHours (texto sem fuso explícito)
+  return /Z|GMT/i.test(str) ? d.getUTCHours() : d.getHours();
+}
+
 async function updateChartLotacaoHoraria() {
   const registros = await fetchData('/lotacao');
   if (!Array.isArray(registros) || !registros.length) return;
 
-  const somaPorHora = new Map(); // hora -> soma de pessoas
+  const somaPorHora = new Map();
   for (const reg of registros) {
-    const dt = new Date(reg.data_hora);
-    if (isNaN(dt.getTime())) continue;
-    const h = dt.getHours();
-    const qtd = Number(reg.qtd_pessoas || 0);
-    somaPorHora.set(h, (somaPorHora.get(h) || 0) + (Number.isFinite(qtd) ? qtd : 0));
+    const h = horaDB(reg.data_hora);
+    if (h == null) continue;
+    somaPorHora.set(h, (somaPorHora.get(h) || 0) + Number(reg.qtd_pessoas || 0));
   }
 
-  const horas = Array.from(somaPorHora.keys()).sort((a,b)=>a-b);
+  // Mantém apenas horas >= 6 (início esperado no banco)
+  const horas = Array.from(somaPorHora.keys())
+    .filter(h => h >= 6)
+    .sort((a, b) => a - b);
+
+  if (!horas.length) return;
+
   const labels = horas.map(h => `${String(h).padStart(2,'0')}:00`);
   const values = horas.map(h => somaPorHora.get(h));
 
-  const ctx = document.getElementById('chartLotacaoHoraria').getContext('2d');
+  const ctx = document.getElementById('chartLotacaoHoraria')?.getContext('2d');
+  if (!ctx) return;
   if (chartLotacaoHoraria) chartLotacaoHoraria.destroy();
   chartLotacaoHoraria = new Chart(ctx, {
     type: 'line',
     data: {
       labels,
       datasets: [{
-        label: 'Total de Pessoas por Horário (soma)',
+        label: 'Total de Pessoas por Horário',
         data: values,
         backgroundColor: 'rgba(75,192,192,.25)',
         borderColor: 'rgba(75,192,192,1)',
@@ -385,15 +408,11 @@ async function updateChartLotacaoHoraria() {
       maintainAspectRatio: true,
       scales: {
         y: { beginAtZero: true, title: { display: true, text: 'Total de Pessoas' } },
-        x: { title: { display: true, text: 'Horário do Dia' } }
+        x: { title: { display: true, text: 'Horário' } }
       },
       plugins: {
         legend: { display: true, position: 'top' },
-        tooltip: {
-          callbacks: {
-            label: ctx => `Total: ${ctx.parsed.y}`
-          }
-        }
+        tooltip: { callbacks: { label: c => `Total: ${c.parsed.y}` } }
       }
     }
   });

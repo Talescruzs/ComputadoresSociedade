@@ -2,10 +2,45 @@ const API_BASE = (window.API_BASE || `${location.protocol}//${location.hostname}
 
 // Define cor padrão dos textos dos gráficos para branco
 if (window.Chart && Chart.defaults) {
+  // Padronização global (igual ao dashboard)
+  Chart.defaults.font = Chart.defaults.font || {};
+  Chart.defaults.font.family = 'system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Arial, sans-serif';
   Chart.defaults.color = '#fff';
+  Chart.defaults.borderColor = 'rgba(255,255,255,.08)';
+  Chart.defaults.plugins = Chart.defaults.plugins || {};
+  Chart.defaults.plugins.legend = Chart.defaults.plugins.legend || {};
+  Chart.defaults.plugins.legend.labels = Chart.defaults.plugins.legend.labels || {};
   Chart.defaults.plugins.legend.labels.color = '#fff';
+  Chart.defaults.plugins.tooltip = Chart.defaults.plugins.tooltip || {};
   Chart.defaults.plugins.tooltip.titleColor = '#fff';
   Chart.defaults.plugins.tooltip.bodyColor = '#fff';
+}
+
+// Padrão visual unificado (igual ao dashboard)
+function stdOptions(extra = {}) {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: 'nearest', intersect: true },
+    scales: {
+      x: {
+        grid: { color: 'rgba(255,255,255,.08)' },
+        ticks: { color: '#fff' },
+        title: { display: true, text: 'Hora do dia', color: '#fff', font: { weight: 600 }, ...(extra.scales?.x?.title || {}) }
+      },
+      y: {
+        beginAtZero: true,
+        grid: { color: 'rgba(255,255,255,.08)' },
+        ticks: { color: '#fff' },
+        title: { display: true, text: 'Passageiros', color: '#fff', font: { weight: 600 }, ...(extra.scales?.y?.title || {}) }
+      }
+    },
+    plugins: {
+      legend: { labels: { color: '#fff' }, position: 'top' },
+      tooltip: { callbacks: extra.plugins?.tooltip?.callbacks || {} }
+    },
+    ...(extra.root || {})
+  };
 }
 
 
@@ -82,13 +117,14 @@ function computeEmbarquesPorLinhaHora(filters){
   const porViagem = new Map();
   for(const r of paradaLotacoesRaw){
     if(linhaFiltro && r.linha_nome !== linhaFiltro) continue;
-    // filtro por dia
+    // filtro por dia (mantido)
     const ts = new Date(r.data_hora).getTime();
     if(tsDiaDe!=null && ts < tsDiaDe) continue;
     if(tsDiaAte!=null && ts > tsDiaAte) continue;
-    // filtro por hora
-    const h = new Date(r.data_hora).getHours();
-    const hm = h; // hora inteiro
+    // filtro por hora com hora do DB (sem fuso)
+    const h = horaDB(r.data_hora);
+    if (h == null) continue;
+    const hm = h; // hora inteira 0..23
     if(horaMin!=null || horaMax!=null){
       if(horaMin!=null && horaMax==null && hm < horaMin) continue;
       if(horaMax!=null && horaMin==null && hm > horaMax) continue;
@@ -106,32 +142,24 @@ function computeEmbarquesPorLinhaHora(filters){
   for(const [_, registros] of porViagem.entries()){
     const ordenados = registros.slice().sort((a,b)=> new Date(a.data_hora) - new Date(b.data_hora));
     let prevQtd = 0;
-    let prevTs = null;
     for(const reg of ordenados){
       const qtd = Number(reg.qtd_pessoas||0);
       const diff = Math.max(qtd - prevQtd, 0);
       prevQtd = qtd;
-      prevTs = reg.data_hora;
-      const hora = new Date(reg.data_hora).getHours();
+      const hora = horaDB(reg.data_hora);
+      if (hora == null) continue;
       resultado.push({ hora, linha: reg.linha_nome || '—', embarques: diff });
     }
   }
 
-  // Aggregated por hora se linhaFiltro vazio (mostrar 'Todas'), senão discriminar por hora para linha
+  // Aggregated
+  const arr24 = Array(24).fill(0);
+  for(const item of resultado){
+    if(item.hora>=0 && item.hora<24) arr24[item.hora] += item.embarques;
+  }
   if(!linhaFiltro){
-    const arr24 = Array(24).fill(0);
-    for(const item of resultado){
-      if(item.hora>=0 && item.hora<24){
-        arr24[item.hora] += item.embarques;
-      }
-    }
     return { tipo:'todas', arr24, detalhado: arr24.map((v,h)=>({hora:h,linha:'Todas',embarques:v})) };
   }else{
-    // apenas registros da linha (já filtrado) -> consolidate por hora
-    const arr24 = Array(24).fill(0);
-    for(const item of resultado){
-      if(item.hora>=0 && item.hora<24) arr24[item.hora] += item.embarques;
-    }
     const detalhado = arr24.map((v,h)=>({hora:h,linha:linhaFiltro,embarques:v}));
     return { tipo:'linha', arr24, detalhado };
   }
@@ -149,28 +177,54 @@ function renderChartHoras(arr24, linhaCtx){
   const ctx = document.getElementById('paradaHoraChart')?.getContext('2d');
   if(!ctx) return;
   if(paradaHoraChartInst) paradaHoraChartInst.destroy();
-  const labels = Array.from({length:24}, (_,i)=>`${String(i).padStart(2,'0')}:00`);
+
+  // Filtra apenas horas com valor > 0
+  const pares = arr24
+    .map((v,h)=>({ h, v }))
+    .filter(p => Number(p.v) > 0);
+
+  const labels = pares.map(p => `${String(p.h).padStart(2,'0')}:00`);
+  const dataVals = pares.map(p => p.v);
+  const horasMap = pares.map(p => p.h); // para clique -> hora real
+
+  const datasetLabel = linhaCtx ? `Embarques por hora (${linhaCtx})` : 'Embarques por hora (todas as linhas)';
+
   paradaHoraChartInst = new Chart(ctx, {
     type:'bar',
     data:{
       labels,
       datasets:[{
-        label: linhaCtx ? `Embarques por hora (${linhaCtx})` : 'Embarques por hora (todas as linhas)',
-        data: arr24,
-        backgroundColor:'rgba(14,165,233,.6)',
-        borderColor:'rgba(14,165,233,1)',
+        label: datasetLabel,
+        data: dataVals,
+        backgroundColor:'rgba(56,189,248,.25)',
+        borderColor:'#38bdf8',
         borderWidth:2
       }]
     },
-    options:{
-      responsive:true,
-      maintainAspectRatio:false,
-      plugins:{ legend:{ display:true } },
-      scales:{
-        y:{ beginAtZero:true, title:{ display:true, text:'Passageiros'} },
-        x:{ title:{ display:true, text:'Hora do dia'} }
+    options: stdOptions({
+      plugins: {
+        tooltip: {
+          callbacks: {
+            label: (c) => `Embarques: ${c.parsed.y}`
+          }
+        }
+      },
+      root: {
+        // Clique na barra define filtros Hora (de/até) e reaplica
+        onClick: (evt, elements) => {
+          if (!elements || !elements.length) return;
+          const idx = elements[0].index;
+          const hour = horasMap[idx];
+          if (hour == null) return;
+          const hh = String(hour).padStart(2,'0') + ':00';
+          const de = document.getElementById('filtroHoraDe');
+          const ate = document.getElementById('filtroHoraAte');
+          if (de) de.value = hh;
+          if (ate) ate.value = hh;
+          aplicarFiltrosHora();
+        }
       }
-    }
+    })
   });
 }
 
@@ -267,3 +321,18 @@ async function loadParadaDetalhes(){
 }
 
 document.addEventListener('DOMContentLoaded', loadParadaDetalhes);
+
+// Helper: extrai hora diretamente do texto do banco (MySQL/ISO/RFC), sem aplicar fuso.
+function horaDB(str) {
+  if (!str) return null;
+  // "YYYY-MM-DD HH:MM:SS" ou "YYYY-MM-DDTHH:MM(:SS)"
+  let m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::\d{2})?$/.exec(str);
+  if (m) return Number(m[4]);
+  // "Thu, 09 Nov 2025 06:00:00 GMT"
+  m = /^\w{3},\s\d{2}\s\w{3}\s\d{4}\s(\d{2}):\d{2}:\d{2}\sGMT$/i.exec(str);
+  if (m) return Number(m[1]);
+  // Fallback: tenta Date, usando UTC se Z/GMT presente
+  const d = new Date(str);
+  if (isNaN(d.getTime())) return null;
+  return /Z|GMT/i.test(str) ? d.getUTCHours() : d.getHours();
+}
